@@ -3211,6 +3211,51 @@ void polymost_finishBufferedDrawing(int mode)
     drawpolyVertsCnt = 0;
 }
 
+void polymost_setupcolor(pthtyp const *pth, int32_t const method, int32_t const skyzbufferhack_pass)
+{
+    float pc[4];
+
+#ifdef POLYMER
+    if (videoGetRenderMode() == REND_POLYMER && polymer_useartmapping() && !(globalflags & GLOBAL_NO_GL_TILESHADES) && polymer_eligible_for_artmap(globalpicnum, pth))
+        pc[0] = pc[1] = pc[2] = 1.0f;
+    else
+#endif
+    {
+        polytint_t const & tint = hictinting[globalpal];
+        float shadeFactor = (pth->flags & PTH_INDEXED) && polymost_usetileshades() == TS_SHADETABLE ? 1.f : getshadefactor(globalshade, globalpal);
+        pc[0] = (1.f-(tint.sr*(1.f/255.f)))*shadeFactor+(tint.sr*(1.f/255.f));
+        pc[1] = (1.f-(tint.sg*(1.f/255.f)))*shadeFactor+(tint.sg*(1.f/255.f));
+        pc[2] = (1.f-(tint.sb*(1.f/255.f)))*shadeFactor+(tint.sb*(1.f/255.f));
+    }
+
+    // spriteext full alpha control
+    pc[3] = float_trans(method & DAMETH_MASKPROPS, drawpoly_blend) * (1.f - drawpoly_alpha);
+
+    // tinting
+    polytintflags_t const tintflags = hictinting[globalpal].f;
+    if (!(tintflags & HICTINT_PRECOMPUTED))
+    {
+        if (pth->flags & PTH_HIGHTILE)
+        {
+            if (pth->palnum != globalpal || (pth->effects & HICTINT_IN_MEMORY) || (tintflags & HICTINT_APPLYOVERALTPAL))
+                hictinting_apply(pc, globalpal);
+        }
+        else if (tintflags & (HICTINT_USEONART|HICTINT_ALWAYSUSEART))
+            hictinting_apply(pc, globalpal);
+    }
+
+    // global tinting
+    if ((pth->flags & PTH_HIGHTILE) && have_basepal_tint())
+        hictinting_apply(pc, MAXPALOOKUPS-1);
+
+    globaltinting_apply(pc);
+
+    if (skyzbufferhack_pass)
+        pc[3] = 0.01f;
+
+    glColor4f(pc[0], pc[1], pc[2], pc[3]);
+}
+
 static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_t method)
 {
     if (doeditorcheck && editstatus)
@@ -3486,47 +3531,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
         handle_blend((method & DAMETH_MASKPROPS) > DAMETH_MASK, drawpoly_blend, (method & DAMETH_MASKPROPS) == DAMETH_TRANS2);
     }
 
-    float pc[4];
-
-#ifdef POLYMER
-    if (videoGetRenderMode() == REND_POLYMER && polymer_useartmapping() && !(globalflags & GLOBAL_NO_GL_TILESHADES) && polymer_eligible_for_artmap(globalpicnum, pth))
-        pc[0] = pc[1] = pc[2] = 1.0f;
-    else
-#endif
-    {
-        polytint_t const & tint = hictinting[globalpal];
-        float shadeFactor = (pth->flags & PTH_INDEXED) && polymost_usetileshades() == TS_SHADETABLE ? 1.f : getshadefactor(globalshade, globalpal);
-        pc[0] = (1.f-(tint.sr*(1.f/255.f)))*shadeFactor+(tint.sr*(1.f/255.f));
-        pc[1] = (1.f-(tint.sg*(1.f/255.f)))*shadeFactor+(tint.sg*(1.f/255.f));
-        pc[2] = (1.f-(tint.sb*(1.f/255.f)))*shadeFactor+(tint.sb*(1.f/255.f));
-    }
-
-    // spriteext full alpha control
-    pc[3] = float_trans(method & DAMETH_MASKPROPS, drawpoly_blend) * (1.f - drawpoly_alpha);
-
-    // tinting
-    polytintflags_t const tintflags = hictinting[globalpal].f;
-    if (!(tintflags & HICTINT_PRECOMPUTED))
-    {
-        if (pth->flags & PTH_HIGHTILE)
-        {
-            if (pth->palnum != globalpal || (pth->effects & HICTINT_IN_MEMORY) || (tintflags & HICTINT_APPLYOVERALTPAL))
-                hictinting_apply(pc, globalpal);
-        }
-        else if (tintflags & (HICTINT_USEONART|HICTINT_ALWAYSUSEART))
-            hictinting_apply(pc, globalpal);
-    }
-
-    // global tinting
-    if ((pth->flags & PTH_HIGHTILE) && have_basepal_tint())
-        hictinting_apply(pc, MAXPALOOKUPS-1);
-
-    globaltinting_apply(pc);
-
-    if (skyzbufferhack_pass)
-        pc[3] = 0.01f;
-
-    glColor4f(pc[0], pc[1], pc[2], pc[3]);
+    polymost_setupcolor(pth, method, skyzbufferhack_pass);
 
     //POGOTODO: remove this, replace it with a shader implementation
     //Hack for walls&masked walls which use textures that are not a power of 2
