@@ -2948,9 +2948,10 @@ static void polymost2_drawVBO(GLenum mode,
     float tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     polytint_t const & polytint = hictinting[globalpal];
     //POGOTODO: full bright pass uses its own globalshade...
-    tint[0] = (1.f-(polytint.sr*(1.f/255.f)))*getshadefactor(globalshade, globalpal)+(polytint.sr*(1.f/255.f));
-    tint[1] = (1.f-(polytint.sg*(1.f/255.f)))*getshadefactor(globalshade, globalpal)+(polytint.sg*(1.f/255.f));
-    tint[2] = (1.f-(polytint.sb*(1.f/255.f)))*getshadefactor(globalshade, globalpal)+(polytint.sb*(1.f/255.f));
+    float const fshade = (float)globalshade;
+    tint[0] = (1.f-(polytint.sr*(1.f/255.f)))*getshadefactor(fshade, globalpal)+(polytint.sr*(1.f/255.f));
+    tint[1] = (1.f-(polytint.sg*(1.f/255.f)))*getshadefactor(fshade, globalpal)+(polytint.sg*(1.f/255.f));
+    tint[2] = (1.f-(polytint.sb*(1.f/255.f)))*getshadefactor(fshade, globalpal)+(polytint.sb*(1.f/255.f));
 
     // spriteext full alpha control
     float alpha = float_trans(dameth & DAMETH_MASKPROPS, drawpoly_blend) * (1.f - drawpoly_alpha);
@@ -3222,7 +3223,9 @@ void polymost_setupcolor(pthtyp const *pth, int32_t const method, int32_t const 
 #endif
     {
         polytint_t const & tint = hictinting[globalpal];
-        float shadeFactor = (pth->flags & PTH_INDEXED) && polymost_usetileshades() == TS_SHADETABLE ? 1.f : getshadefactor(globalshade, globalpal);
+        float shadeFactor = (pth->flags & PTH_INDEXED) && polymost_usetileshades() == TS_SHADETABLE
+                          ? 1.f
+                          : getshadefactor((float)globalshade, globalpal);
         pc[0] = (1.f-(tint.sr*(1.f/255.f)))*shadeFactor+(tint.sr*(1.f/255.f));
         pc[1] = (1.f-(tint.sg*(1.f/255.f)))*shadeFactor+(tint.sg*(1.f/255.f));
         pc[2] = (1.f-(tint.sb*(1.f/255.f)))*shadeFactor+(tint.sb*(1.f/255.f));
@@ -9677,7 +9680,7 @@ void polymost_fillpolygon(int32_t npoints)
     }
 
     polymost_updatePalette();
-    float const f = getshadefactor(globalshade, globalpal);
+    float const f = getshadefactor((float)globalshade, globalpal);
 
     uint8_t const maskprops = (globalorientation>>7)&DAMETH_MASKPROPS;
     handle_blend(maskprops > DAMETH_MASK, 0, maskprops == DAMETH_TRANS2);

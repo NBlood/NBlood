@@ -2118,7 +2118,8 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
     {
         if (!(m->flags&1))
             hictinting_apply(pc, globalpal);
-        else globalnoeffect=1;
+        else
+            globalnoeffect=1;
     }
 
     // global tinting

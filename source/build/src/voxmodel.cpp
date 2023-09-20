@@ -1228,13 +1228,29 @@ int32_t polymost_voxdraw(voxmodel_t *m, tspriteptr_t const tspr)
 
     float pc[4];
 
-    pc[0] = pc[1] = pc[2] = ((float)numshades - min(max((globalshade * shadescale) + m->shadeoff, 0.f), (float)numshades)) / (float)numshades;
+#ifdef POLYMER
+    if (videoGetRenderMode() == REND_POLYMER && polymer_useartmapping() && !(globalflags & GLOBAL_NO_GL_TILESHADES) && polymer_voxel_eligible_for_artmap(m))
+        pc[0] = pc[1] = pc[2] = 1.0f;
+    else
+#endif
+    {
+        float const shade = min(max(((float)globalshade * shadescale) + m->shadeoff, 0.f), (float)numshades);
+        polytint_t const & tint = hictinting[globalpal];
+        float shadeFactor = m->is8bit && polymost_usetileshades() == TS_SHADETABLE
+                          ? 1.f
+                          : getshadefactor(shade, globalpal);
+        pc[0] = (1.f-(tint.sr*(1.f/255.f)))*shadeFactor+(tint.sr*(1.f/255.f));
+        pc[1] = (1.f-(tint.sg*(1.f/255.f)))*shadeFactor+(tint.sg*(1.f/255.f));
+        pc[2] = (1.f-(tint.sb*(1.f/255.f)))*shadeFactor+(tint.sb*(1.f/255.f));
+    }
+
     polytintflags_t const tintflags = hictinting[globalpal].f;
     if (!(tintflags & HICTINT_PRECOMPUTED))
     {
         if (!(m->flags & 1))
             hictinting_apply(pc, globalpal);
-        else globalnoeffect = 1;
+        else
+            globalnoeffect = 1;
     }
 
     // global tinting
@@ -1293,20 +1309,11 @@ int32_t polymost_voxdraw(voxmodel_t *m, tspriteptr_t const tspr)
             buildgl_bindTexture(GL_TEXTURE_2D, m->texid8bit);
 
         buildgl_bindSamplerObject(0, PTH_INDEXED);
-        
-        float yp = (tspr->x-globalposx)*gcosang2+(tspr->y-globalposy)*gsinang2;
-        int visShade = int(fabsf(yp*float(globvis2)*float(xdimscale)*(1.f/(256.f*128.f*65536.f))));
 
-        if (polymost_usetileshades())
-        {
-            globalshade = max(min(globalshade+visShade, numshades-1), 0);
-            pc[0] = pc[1] = pc[2] = 1.f;
-        }
         polymost_usePaletteIndexing(true);
         polymost_updatePalette();
         polymost_setTexturePosSize({ 0.f, 0.f, 1.f, 1.f });
         polymost_setHalfTexelSize({ 0.f, 0.f });
-        polymost_setVisibility(0.f);
     }
     else
     {
