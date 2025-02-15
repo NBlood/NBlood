@@ -239,6 +239,11 @@ char credPlaySmk(const char *_pzSMK, const char *_pzWAV, int nWav)
     Smacker_GetPalette(hSMK, palette);
     paletteSetColorTable(kSMKPal, palette);
     videoSetPalette(gBrightness>>2, kSMKPal, 8+2);
+#ifdef USE_OPENGL
+    const int bakUseindexedcolortextures = r_useindexedcolortextures;
+    r_useindexedcolortextures = 1;
+    osdcmd_restartvid(NULL);
+#endif
 
     auto const oyxaspect = yxaspect;
 
@@ -312,6 +317,10 @@ char credPlaySmk(const char *_pzSMK, const char *_pzWAV, int nWav)
     FX_StopAllSounds();
     renderSetAspect(viewingrange, oyxaspect);
     videoSetPalette(gBrightness >> 2, 0, 8+2);
+#ifdef USE_OPENGL
+    r_useindexedcolortextures = bakUseindexedcolortextures;
+    osdcmd_restartvid(NULL);
+#endif
     walock[kSMKTile] = 0;
     waloff[kSMKTile] = 0;
     tileSetSize(kSMKTile, 0, 0);
