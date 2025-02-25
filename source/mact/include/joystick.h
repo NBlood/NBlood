@@ -54,6 +54,7 @@ int32_t	JOYSTICK_GetControllerButtons( void );
 void	JOYSTICK_ClearAllButtons( void );
 int32_t	JOYSTICK_GetHat( int32_t h );
 void JOYSTICK_SetDeadZone(int32_t axis, uint16_t dead, uint16_t satur);
+void JOYSTICK_SetAxisSoloDeadZone(int32_t axis, bool dead);
 
 #ifdef __cplusplus
 }
