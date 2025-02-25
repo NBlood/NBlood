@@ -1023,6 +1023,7 @@ int32_t registerosdcommands(void)
         { "fov", "change the field of view", (void *)&gFov, CVAR_INT|CVAR_FUNCPTR, 75, 140 },
 
         { "in_aimmode", "0: toggle, 1: hold to aim", (void *)&gMouseAiming, CVAR_BOOL, 0, 1 },
+        { "in_centerviewondrop", "enable/disable recenter view when dropping down onto ground", (void *)&gCenterViewOnDrop, CVAR_BOOL, 0, 1 },
         {
             "in_mousebias", "emulates the original mouse code's weighting of input towards whichever axis is moving the most at any given time",
             (void *)&MouseBias, CVAR_INT, 0, 32

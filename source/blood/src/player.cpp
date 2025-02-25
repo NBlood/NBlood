@@ -2246,6 +2246,8 @@ int playerDamageSprite(int nSource, PLAYER *pPlayer, DAMAGE_TYPE nDamageType, in
         return 0;
     nDamage = playerDamageArmor(pPlayer, nDamageType, nDamage);
     pPlayer->painEffect = ClipHigh(pPlayer->painEffect+(nDamage>>3), 600);
+    if (pPlayer == gMe)
+        ctrlJoystickRumble(pPlayer->painEffect);
 
     spritetype *pSprite = pPlayer->pSprite;
     XSPRITE *pXSprite = pPlayer->pXSprite;
@@ -2494,6 +2496,8 @@ void playerLandingSound(PLAYER *pPlayer)
     SPRITEHIT *pHit = &gSpriteHit[pSprite->extra];
     if (pHit->florhit)
     {
+        if ((pPlayer == gMe) && gCenterViewOnDrop)
+            gCenterViewOnDrop = 2;
         if (!gGameOptions.bFriendlyFire && IsTargetTeammate(pPlayer, &sprite[pHit->florhit & 0x3fff]))
             return;
         char nSurf = tileGetSurfType(pHit->florhit);

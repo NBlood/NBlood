@@ -27,6 +27,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 typedef struct {
     int32_t usejoystick;
+    int32_t joystickrumble;
     int32_t usemouse;
     int32_t fullscreen;
     int32_t xdim;

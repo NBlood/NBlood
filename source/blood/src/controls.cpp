@@ -520,6 +520,11 @@ void ctrlGetInput(void)
         }
         if (input.q16turn == 0)
             input.q16turn = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_int(info.dyaw>>4), F16(32)));
+        if (gCenterViewOnDrop == 2)
+        {
+            gInput.keyFlags.lookCenter = 1;
+            gCenterViewOnDrop = 1;
+        }
     }
     if (!gMouseAimingFlipped)
         input.q16mlook = -input.q16mlook;
@@ -563,4 +568,17 @@ void ctrlGetInput(void)
         }
         gViewLook = fix16_clamp(gViewLook+(input.q16mlook << 3), F16(downAngle), F16(upAngle));
     }
+}
+
+void ctrlJoystickRumble(int nTime)
+{
+    if (!CONTROL_JoystickEnabled || !joystick.hasRumble || !gSetup.joystickrumble)
+        return;
+
+    const int nRumble = nTime<<9;
+    nTime = ClipLow(nTime, 28)<<3;
+    joystick.rumbleHigh = UINT16_MAX > joystick.rumbleHigh + nRumble ? joystick.rumbleHigh + nRumble : UINT16_MAX;
+    joystick.rumbleLow  = UINT16_MAX > joystick.rumbleHigh + nRumble ? joystick.rumbleLow  + nRumble : UINT16_MAX;
+    joystick.rumbleHigh >>= 1;
+    joystick.rumbleTime = nTime      > joystick.rumbleTime ? nTime : joystick.rumbleTime;
 }
