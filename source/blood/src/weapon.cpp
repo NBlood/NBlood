@@ -50,7 +50,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #endif
 #include "view.h"
 
-#define kQAVEnd 125
+#define kQAVEnd 126
+#define kQAVSprayDown (kQAVEnd-1) // custom qav for spray can unequip animation
 
 void FirePitchfork(int, PLAYER *pPlayer);
 void FireSpray(int, PLAYER *pPlayer);
@@ -220,14 +221,23 @@ void SpawnShellEject(PLAYER *pPlayer, int a2, int a3)
 
 void WeaponInit(void)
 {
-    for (int i = 0; i < kQAVEnd; i++)
+    DICTNODE *hRes;
+    for (int i = 0; i < kQAVEnd-1; i++)
     {
-        DICTNODE *hRes = gSysRes.Lookup(i, "QAV");
+        hRes = gSysRes.Lookup(i, "QAV");
         if (!hRes)
             ThrowError("Could not load QAV %d\n", i);
         weaponQAV[i] = (QAV*)gSysRes.Lock(hRes);
         weaponQAV[i]->nSprite = -1;
     }
+    hRes = gSysRes.Lookup("NEWCANDOWN2", "QAV");
+    if (hRes)
+    {
+        weaponQAV[kQAVSprayDown] = (QAV*)gSysRes.Lock(hRes);
+        weaponQAV[kQAVSprayDown]->nSprite = -1;
+    }
+    else
+        weaponQAV[kQAVSprayDown] = NULL;
 }
 
 void WeaponPrecache(void)
@@ -702,12 +712,14 @@ void WeaponLower(PLAYER *pPlayer)
                 return;
             }
             pPlayer->weaponState = 1;
-            StartQAV(pPlayer, 11, -1, 0);
             if (pPlayer->input.newWeapon == kWeaponSprayCan)
             {
+                StartQAV(pPlayer, 11, -1, 0);
                 pPlayer->input.newWeapon = kWeaponNone;
                 WeaponLower(pPlayer);
             }
+            else // use fixed qav animation for lowering spray can
+                StartQAV(pPlayer, !VanillaMode() && weaponQAV[kQAVSprayDown] ? kQAVSprayDown : 11, -1, 0);
             break;
         case 7: // throwing ignited alt fire spray (this happens when submerging underwater while holding down throw spray can)
             if (VanillaMode() || (pPlayer->input.newWeapon != kWeaponNone))
