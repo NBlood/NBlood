@@ -267,6 +267,11 @@ void JOYSTICK_SetDeadZone(int32_t axis, uint16_t dead, uint16_t satur)
     joyAxes[axis].saturation = satur;
 }
 
+void JOYSTICK_SetAxisSoloDeadZone(int32_t axis, bool dead)
+{
+    joyAxes[axis].solodeadzone = dead;
+}
+
 void CONTROL_SetAnalogAxisScale(int32_t whichaxis, int32_t axisscale, controldevice device)
 {
     float *set;
@@ -488,7 +493,7 @@ static void controlUpdateAxisState(int index, ControlInfo *const info)
     else
     {
         // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
-        if (index <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (index <= CONTROLLER_AXIS_RIGHTY)))
+        if (!a.solodeadzone && (index <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (index <= CONTROLLER_AXIS_RIGHTY))))
             axisScaled10k = min(10000, joydist(joystick.pAxis[index & ~1], joystick.pAxis[index | 1]) * 10000 / 32767);
 
         if (axisScaled10k < a.deadzone)

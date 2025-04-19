@@ -65,6 +65,7 @@ int32_t JoystickAnalogueScale[MAXJOYAXES];
 int32_t JoystickAnalogueDead[MAXJOYAXES];
 int32_t JoystickAnalogueSaturate[MAXJOYAXES];
 int32_t JoystickAnalogueInvert[MAXJOYAXES];
+int32_t JoystickAnalogueAxisSoloDeadZone[MAXJOYAXES];
 uint8_t KeyboardKeys[NUMGAMEFUNCTIONS][2];
 int32_t scripthandle;
 int32_t setupread;
@@ -484,6 +485,9 @@ void CONFIG_SetDefaults(void)
 
         JoystickAnalogueInvert[i] = 0;
         CONTROL_SetAnalogAxisInvert(i, JoystickAnalogueInvert[i]);
+
+        JoystickAnalogueAxisSoloDeadZone[i] = 0;
+        JOYSTICK_SetAxisSoloDeadZone(i, JoystickAnalogueAxisSoloDeadZone[i]);
     }
 #else
     for (int i=0; i<MAXJOYBUTTONSANDHATS; i++)
@@ -512,6 +516,9 @@ void CONFIG_SetDefaults(void)
 
         JoystickAnalogueInvert[i] = 0;
         CONTROL_SetAnalogAxisInvert(i, JoystickAnalogueInvert[i]);
+
+        JoystickAnalogueAxisSoloDeadZone[i] = joystickanalogaxissolodeadzone[i];
+        JOYSTICK_SetAxisSoloDeadZone(i, JoystickAnalogueAxisSoloDeadZone[i]);
     }
 #endif
 }
@@ -673,6 +680,11 @@ void CONFIG_SetupJoystick(void)
         scale = JoystickAnalogueInvert[i];
         SCRIPT_GetNumber(scripthandle, "Controls", str,&scale);
         JoystickAnalogueInvert[i] = scale;
+
+        Bsprintf(str,"JoystickAnalogAxisSoloDeadZone%d",i);
+        scale = JoystickAnalogueAxisSoloDeadZone[i];
+        SCRIPT_GetNumber(scripthandle, "Controls", str,&scale);
+        JoystickAnalogueAxisSoloDeadZone[i] = scale;
     }
 
     for (i=0; i<MAXJOYBUTTONSANDHATS; i++)
@@ -688,6 +700,7 @@ void CONFIG_SetupJoystick(void)
         CONTROL_SetAnalogAxisScale(i, JoystickAnalogueScale[i], controldevice_joystick);
         JOYSTICK_SetDeadZone(i, JoystickAnalogueDead[i], JoystickAnalogueSaturate[i]);
         CONTROL_SetAnalogAxisInvert(i, JoystickAnalogueInvert[i]);
+        JOYSTICK_SetAxisSoloDeadZone(i, JoystickAnalogueAxisSoloDeadZone[i]);
     }
 }
 
@@ -990,6 +1003,9 @@ void CONFIG_WriteSetup(uint32_t flags)
 
             Bsprintf(buf, "JoystickAnalogInvert%d", dummy);
             SCRIPT_PutNumber(scripthandle, "Controls", buf, JoystickAnalogueInvert[dummy], FALSE, FALSE);
+
+            Bsprintf(buf, "JoystickAnalogAxisSoloDeadZone%d", dummy);
+            SCRIPT_PutNumber(scripthandle, "Controls", buf, JoystickAnalogueAxisSoloDeadZone[dummy], FALSE, FALSE);
         }
     }
 
