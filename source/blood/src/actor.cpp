@@ -5324,21 +5324,23 @@ void actProcessSprites(void)
                         #ifdef NOONE_EXTENSIONS
                         if (pSprite->type == kModernThingEnemyLifeLeech) proxyDist = 512;
                         #endif
-                        if (pSprite->type == kThingDroppedLifeLeech && pXSprite->target == -1)  {
-                            int nOwner = actOwnerIdToSpriteId(pSprite->owner);
-                            spritetype *pOwner = &sprite[nOwner];
-                            if (!IsPlayerSprite(pOwner))
-                                continue;
-                            PLAYER *pPlayer = &gPlayer[pOwner->type - kDudePlayer1];
+                        if (pSprite->type == kThingDroppedLifeLeech && pXSprite->target == -1) {
                             PLAYER *pPlayer2 = NULL;
                             if (IsPlayerSprite(pSprite2))
                                 pPlayer2 = &gPlayer[pSprite2->type - kDudePlayer1];
+                            int nOwner = actOwnerIdToSpriteId(pSprite->owner);
                             if (nSprite2 == nOwner || pSprite2->type == kDudeZombieAxeBuried || pSprite2->type == kDudeRat || pSprite2->type == kDudeBat)
-                                continue;
-                            if (gGameOptions.nGameType == kGameTypeTeams && pPlayer2 && pPlayer->teamId == pPlayer2->teamId)
                                 continue;
                             if (gGameOptions.nGameType == kGameTypeCoop && pPlayer2)
                                 continue;
+                            if (spriRangeIsFine(nOwner)) {
+                                spritetype *pOwner = &sprite[nOwner];
+                                if (IsPlayerSprite(pOwner)) {
+                                    PLAYER *pPlayer = &gPlayer[pOwner->type - kDudePlayer1];
+                                    if (gGameOptions.nGameType == kGameTypeTeams && pPlayer2 && pPlayer->teamId == pPlayer2->teamId)
+                                        continue;
+                                }
+                            }
                             proxyDist = 512;
                         }
                         
