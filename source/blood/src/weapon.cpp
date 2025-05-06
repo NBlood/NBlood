@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "crc32.h"
 #include "compat.h"
 #include "build.h"
 #include "mmulti.h"
@@ -52,6 +53,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #define kQAVEnd 126
 #define kQAVSprayDown (kQAVEnd-1) // custom qav for spray can unequip animation
+
+#define kQAVCanDown2CRC 1233299925
 
 void FirePitchfork(int, PLAYER *pPlayer);
 void FireSpray(int, PLAYER *pPlayer);
@@ -222,6 +225,7 @@ void SpawnShellEject(PLAYER *pPlayer, int a2, int a3)
 void WeaponInit(void)
 {
     DICTNODE *hRes;
+    char bFixCanDown2 = 0;
     for (int i = 0; i < kQAVEnd-1; i++)
     {
         hRes = gSysRes.Lookup(i, "QAV");
@@ -229,9 +233,11 @@ void WeaponInit(void)
             ThrowError("Could not load QAV %d\n", i);
         weaponQAV[i] = (QAV*)gSysRes.Lock(hRes);
         weaponQAV[i]->nSprite = -1;
+        if (i == 11)
+            bFixCanDown2 = Bcrc32((void *)weaponQAV[i], hRes->size, 0) == kQAVCanDown2CRC;
     }
     hRes = gSysRes.Lookup("NEWCANDOWN2", "QAV");
-    if (hRes)
+    if (hRes && bFixCanDown2)
     {
         weaponQAV[kQAVSprayDown] = (QAV*)gSysRes.Lock(hRes);
         weaponQAV[kQAVSprayDown]->nSprite = -1;
