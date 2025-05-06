@@ -51,8 +51,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #endif
 #include "view.h"
 
-#define kQAVEnd 126
-#define kQAVSprayDown (kQAVEnd-1) // custom qav for spray can unequip animation
+#define kQAVEndVanilla  125
+#define kQAVCanDown2Fix 125 // custom qav for spray can unequip animation fix
+#define kQAVEnd         126
 
 #define kQAVCanDown2CRC 1233299925
 
@@ -226,7 +227,7 @@ void WeaponInit(void)
 {
     DICTNODE *hRes;
     char bFixCanDown2 = 0;
-    for (int i = 0; i < kQAVEnd-1; i++)
+    for (int i = 0; i < kQAVEndVanilla; i++)
     {
         hRes = gSysRes.Lookup(i, "QAV");
         if (!hRes)
@@ -239,11 +240,11 @@ void WeaponInit(void)
     hRes = gSysRes.Lookup("NEWCANDOWN2", "QAV");
     if (hRes && bFixCanDown2)
     {
-        weaponQAV[kQAVSprayDown] = (QAV*)gSysRes.Lock(hRes);
-        weaponQAV[kQAVSprayDown]->nSprite = -1;
+        weaponQAV[kQAVCanDown2Fix] = (QAV*)gSysRes.Lock(hRes);
+        weaponQAV[kQAVCanDown2Fix]->nSprite = -1;
     }
     else
-        weaponQAV[kQAVSprayDown] = NULL;
+        weaponQAV[kQAVCanDown2Fix] = NULL;
 }
 
 void WeaponPrecache(void)
@@ -725,7 +726,7 @@ void WeaponLower(PLAYER *pPlayer)
                 WeaponLower(pPlayer);
             }
             else // use fixed qav animation for lowering spray can
-                StartQAV(pPlayer, !VanillaMode() && weaponQAV[kQAVSprayDown] ? kQAVSprayDown : 11, -1, 0);
+                StartQAV(pPlayer, !VanillaMode() && weaponQAV[kQAVCanDown2Fix] ? kQAVCanDown2Fix : 11, -1, 0);
             break;
         case 7: // throwing ignited alt fire spray (this happens when submerging underwater while holding down throw spray can)
             if (VanillaMode() || (pPlayer->input.newWeapon != kWeaponNone))
