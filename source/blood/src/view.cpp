@@ -37,6 +37,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "choke.h"
 #include "config.h"
 #include "db.h"
+#include "demo.h"
 #include "endgame.h"
 #include "gamemenu.h"
 #include "gameutil.h"
@@ -3574,7 +3575,7 @@ void viewDrawScreen(void)
                 gViewSpritePredictLoc.z = interpolate(pView->at58, gViewSpritePredictLoc.z, gInterpolate);
             }
         }
-        if (gView == gMe && (numplayers <= 1 || gPrediction) && gView->pXSprite->health != 0 && !VanillaMode())
+        if (gView == gMe && (numplayers <= 1 || gPrediction) && gView->pXSprite->health != 0 && !gDemo.at1 && !VanillaMode())
         {
             fix16_t q16look;
             cA = gViewAngle;
