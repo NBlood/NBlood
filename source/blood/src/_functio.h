@@ -356,7 +356,7 @@ static const int32_t joystickanalogdeaddefaults[MAXJOYAXES] =
    };
 
 
-static const int32_t joystickanalogaxissolodeadzone[MAXJOYAXES] =
+static const int32_t joystickanalogdecoupledaxes[MAXJOYAXES] =
    {
    1,
    0,
