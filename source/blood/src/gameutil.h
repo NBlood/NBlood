@@ -82,5 +82,5 @@ void GetZRangeAtXYZ(int x, int y, int z, int nSector, int *ceilZ, int *ceilHit, 
 int GetDistToLine(int x1, int y1, int x2, int y2, int x3, int y3);
 unsigned int ClipMove(int *x, int *y, int *z, int *nSector, int xv, int yv, int wd, int cd, int fd, unsigned int nMask);
 int GetClosestSectors(int nSector, int x, int y, int nDist, short *pSectors, char *pSectBit);
-int GetClosestSpriteSectors(int nSector, int x, int y, int nDist, short *pSectors, char *pSectBit, short *pWalls = NULL);
+int GetClosestSpriteSectors(int nSector, int x, int y, int nDist, short *pSectors, char *pSectBit, short *pWalls = NULL, bool bAccurateCheck = false);
 void GetSpriteExtents(spritetype* pSpr, int* x1, int* y1, int* x2, int* y2, int* zt, int* zb, char flags = 0x07);

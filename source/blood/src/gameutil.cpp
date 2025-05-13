@@ -841,8 +841,12 @@ int GetClosestSectors(int nSector, int x, int y, int nDist, short *pSectors, cha
     return n;
 }
 
-int GetClosestSpriteSectors(int nSector, int x, int y, int nDist, short *pSectors, char *pSectBit, short *pWalls)
+int GetClosestSpriteSectors(int nSector, int x, int y, int nDist, short *pSectors, char *pSectBit, short *pWalls, bool bAccurateCheck)
 {
+    // by default this function fails with sectors that linked with wide spans, or there was more than one link to the same sector. for example...
+    // E6M1: throwing TNT on the stone footpath while standing on the brown road will fail due to the start/end points of the span being too far away. it'll only do damage at one end of the road
+    // E1M2: throwing TNT at the double doors while standing on the train platform
+    // by setting bAccurateCheck to true these issues will be resolved
     char sectbits[bitmap_size(kMaxSectors)];
     dassert(pSectors != NULL);
     memset(sectbits, 0, sizeof(sectbits));
@@ -850,6 +854,7 @@ int GetClosestSpriteSectors(int nSector, int x, int y, int nDist, short *pSector
     SetBitString(sectbits, nSector);
     int n = 1, m = 0;
     int i = 0;
+    bool bWithinRange;
     if (pSectBit)
     {
         memset(pSectBit, 0, bitmap_size(kMaxSectors));
@@ -868,8 +873,19 @@ int GetClosestSpriteSectors(int nSector, int x, int y, int nDist, short *pSector
                 continue;
             if (TestBitString(sectbits, nNextSector))
                 continue;
-            SetBitString(sectbits, nNextSector);
-            if (CheckProximityWall(wall[j].point2, x, y, nDist))
+            if (!bAccurateCheck) // original method
+            {
+                bWithinRange = CheckProximityWall(wall[j].point2, x, y, nDist);
+                SetBitString(sectbits, nNextSector);
+            }
+            else // accurate check
+            {
+                vec2_t pos = {x, y};
+                bWithinRange = getwalldist(pos, j) <= (nDist<<4);
+                if (bWithinRange) // only set if sector is within range
+                    SetBitString(sectbits, nNextSector);
+            }
+            if (bWithinRange)
             {
                 if (pSectBit)
                     SetBitString(pSectBit, nNextSector);
