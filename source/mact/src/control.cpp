@@ -267,6 +267,11 @@ void JOYSTICK_SetDeadZone(int32_t axis, uint16_t dead, uint16_t satur)
     joyAxes[axis].saturation = satur;
 }
 
+void JOYSTICK_SetSnapZone(int32_t axis, uint16_t snap)
+{
+    joyAxes[axis].snapzone = snap;
+}
+
 void CONTROL_SetAnalogAxisScale(int32_t whichaxis, int32_t axisscale, controldevice device)
 {
     float *set;
@@ -470,32 +475,56 @@ static int controllerDigitizeAxis(int axis)
     return 0;
 }
 
-static inline int32_t joydist(int x, int y) { return ksqrt(x * x + y * y); }
+static inline float joydist(vec2f_t stick) { return sqrtf(stick.x * stick.x + stick.y * stick.y); }
 
-static void controlUpdateAxisState(int index, ControlInfo *const info)
+static inline vec2f_t controlCalDeadzone(const vec2f_t fInput, const vec2f_t fDead)
 {
-    int const  in  = joystick.pAxis[index];
-    auto &     a   = joyAxes[index];
+    const float fMagnitude = min(joydist(fInput), 1.f);
+
+    vec2f_t fOut = {0.f, 0.f};
+    if (fDead.x < fMagnitude)
+        fOut.x = fInput.x * ((fMagnitude - fDead.x) / (1.f - fDead.x) * fMagnitude);
+    if (fDead.y < fMagnitude)
+        fOut.y = fInput.y * ((fMagnitude - fDead.y) / (1.f - fDead.y) * fMagnitude);
+    return fOut;
+};
+
+static inline vec2f_t controlCalSlopedScaledAxialDeadzone(const vec2f_t fInput, const vec2f_t fSnap)
+{
+    const vec2f_t fAbs = {fabsf(fInput.x), fabsf(fInput.y)};
+    const vec2f_t fDead = {fSnap.x * fAbs.y, fSnap.y * fAbs.x}; // deadzone uses opposite axis as input
+
+    vec2f_t fOut = {0.f, 0.f};
+    if (fDead.x < fAbs.x)
+        fOut.x = (fAbs.x - fDead.x) / (1.f - fDead.x) * copysignf(1.f, fInput.x);
+    if (fDead.y < fAbs.y)
+        fOut.y = (fAbs.y - fDead.y) / (1.f - fDead.y) * copysignf(1.f, fInput.y);
+    return fOut;
+};
+
+static inline vec2f_t controlCalExpo(const vec2f_t fInput, const vec2f_t fExpo)
+{
+    const float fMagnitude = joydist(fInput);
+
+    vec2f_t fOut = {0.f, 0.f};
+    if (fMagnitude == 0.f)
+        return fOut;
+
+    const vec2f_t fInputExpo = {fInput.x * powf(fMagnitude, fExpo.x), fInput.y * powf(fMagnitude, fExpo.y)};
+    fOut.x = fInputExpo.x / fMagnitude;
+    fOut.y = fInputExpo.y / fMagnitude;
+    return fOut;
+};
+
+static inline void controlTransformToAxis(int index, int input, ControlInfo* const info)
+{
+    auto& a = joyAxes[index];
     auto const out = &a.axis;
 
     a.last = a.axis;
     *out = {};
 
-    int axisScaled10k = klabs(in * 10000 / 32767);
-
-    if (axisScaled10k >= a.saturation)
-        out->analog = 32767 * ksgn(in);
-    else
-    {
-        // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
-        if (index <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (index <= CONTROLLER_AXIS_RIGHTY)))
-            axisScaled10k = min(10000, joydist(joystick.pAxis[index & ~1], joystick.pAxis[index | 1]) * 10000 / 32767);
-
-        if (axisScaled10k < a.deadzone)
-            out->analog = 0;
-        else
-            out->analog = in * (axisScaled10k - a.deadzone) / a.saturation;
-    }
+    a.axis.analog = min(max(input, -MAXSCALEDCONTROLVALUE), MAXSCALEDCONTROLVALUE);
 
     if (controllerDigitizeAxis(index))
         CONTROL_LastSeenInput = LastSeenInput::Joystick;
@@ -514,6 +543,50 @@ static void controlUpdateAxisState(int index, ControlInfo *const info)
         case analog_moving:           info->dz     += a.axis.analog; break;
         default: break;
     }
+};
+
+static void controlUpdateAxisState(int index, ControlInfo *const info, const bool bTwoAxis)
+{
+    const float kSDLStickNorm =     1.f / 32767.f; // convert SDL stick range (-32768/32767) to (-1/1)
+    const float kDead10KRange = 10000.f / 32768.f; // convert old eduke deadzone values to new float calculation
+
+    vec2f_t fDead, fSat, fSnap, fStick;
+    auto      &a1 = joyAxes[index];
+    int const in1 = joystick.pAxis[index];
+
+    fDead.x  = fix16_to_float(a1.deadzone<<1)   / kDead10KRange;
+    fSat.x   = fix16_to_float(a1.saturation<<1) / kDead10KRange;
+    fSnap.x  = fix16_to_float(a1.snapzone);
+    fStick.x = float(in1) * kSDLStickNorm;
+
+    fDead.x  = min(fDead.x, 0.99f);
+    fSnap.x  = min(fSnap.x, 0.50f);
+    fStick.x = max(fStick.x, -1.f);
+
+    if (bTwoAxis)
+    {
+        auto      &a2 = joyAxes[index+1];
+        int const in2 = joystick.pAxis[index+1];
+
+        fDead.y  = fix16_to_float(a2.deadzone<<1)   / kDead10KRange;
+        fSat.y   = fix16_to_float(a2.saturation<<1) / kDead10KRange;
+        fSnap.y  = fix16_to_float(a2.snapzone);
+        fStick.y = float(in2) * kSDLStickNorm;
+
+        fDead.y  = min(fDead.y, 0.99f);
+        fSnap.y  = min(fSnap.y, 0.50f);
+        fStick.y = max(fStick.y, -1.f);
+    }
+    else
+        fDead.y = fSat.y = fSnap.y = fStick.y = 0.f;
+
+    fStick = controlCalDeadzone(fStick, fDead); // radial deadzone
+    if (bTwoAxis && ((fSnap.x > 0.f) || (fSnap.y > 0.f))) // apply only if either stick has a snap value
+        fStick = controlCalSlopedScaledAxialDeadzone(fStick, fSnap); // sloped scaled axial deadzone
+    fStick = controlCalExpo(fStick, fSat); // exponent using stick magnitude
+    controlTransformToAxis(index, int(fStick.x / kSDLStickNorm), info);
+    if (bTwoAxis)
+        controlTransformToAxis(index+1, int(fStick.y / kSDLStickNorm), info);
 }
 
 static void controlPollDevices(ControlInfo *const info)
@@ -530,8 +603,19 @@ static void controlPollDevices(ControlInfo *const info)
 
     if (CONTROL_JoystickEnabled)
     {
-        for (int i=joystick.numAxes-1; i>=0; i--)
-            controlUpdateAxisState(i, info);
+        for (int i=0; i<joystick.numAxes; i++)
+        {
+            // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
+            if (i <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (i <= CONTROLLER_AXIS_RIGHTY)))
+            {
+                controlUpdateAxisState(i, info, TRUE); // do both axis
+                i++; // skip to next set of axis
+            }
+            else
+            {
+                controlUpdateAxisState(i, info, FALSE); // do single axis
+            }
+        }
     }
 
     controlUpdateButtonStates();
