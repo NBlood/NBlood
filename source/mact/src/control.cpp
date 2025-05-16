@@ -267,6 +267,11 @@ void JOYSTICK_SetDeadZone(int32_t axis, uint16_t dead, uint16_t satur)
     joyAxes[axis].saturation = satur;
 }
 
+void JOYSTICK_SetSnapZone(int32_t axis, uint16_t snap)
+{
+    joyAxes[axis].snapzone = snap;
+}
+
 void CONTROL_SetAnalogAxisScale(int32_t whichaxis, int32_t axisscale, controldevice device)
 {
     float *set;
@@ -471,31 +476,78 @@ static int controllerDigitizeAxis(int axis)
 }
 
 static inline int32_t joydist(int x, int y) { return ksqrt(x * x + y * y); }
+static inline float joydist(vec2f_t stick) { return sqrtf(stick.x * stick.x + stick.y * stick.y); }
 
-static void controlUpdateAxisState(int index, ControlInfo *const info)
+// radial deadzone based on github.com/jeremiah-sypult/Quakespasm-Rift
+static inline vec2f_t controlRadialDeadzone(vec2f_t input, vec2f_t deadzone)
 {
-    int const  in  = joystick.pAxis[index];
-    auto &     a   = joyAxes[index];
+    vec2f_t result = {0.f, 0.f};
+    float magnitude = min(joydist(input), 1.f);
+    deadzone = {min(max(deadzone.x, 0.0f), 0.99f), min(max(deadzone.y, 0.0f), 0.99f)}; // clamp to [0.0, 0.99]
+
+    if (magnitude > deadzone.x)
+    {
+        const float scale = ((magnitude - deadzone.x) / (1.0 - deadzone.x)) / magnitude;
+        result.x = input.x * scale;
+    }
+    if (magnitude > deadzone.y)
+    {
+        const float scale = ((magnitude - deadzone.y) / (1.0 - deadzone.y)) / magnitude;
+        result.y = input.y * scale;
+    }
+    return result;
+};
+
+// sloped axial deadzone based on github.com/Minimuino/thumbstick-deadzones
+static inline vec2f_t controlSlopedAxialDeadzone(vec2f_t input, vec2f_t snapzone)
+{
+    auto joymaprange = [](float v, float deadzone, float sign) { return ((v - deadzone) / (1 - deadzone)) * sign; };
+
+    vec2f_t result = {0.f, 0.f};
+    float abs_x = fabsf(input.x);
+    float abs_y = fabsf(input.y);
+    float sign_x = copysignf(1.0f, input.x);
+    float sign_y = copysignf(1.0f, input.y);
+    snapzone = {min(snapzone.x, 0.5f), min(snapzone.y, 0.5f)};
+    float deadzone_x = snapzone.x * abs_y; // deadzone of one axis depends...
+    float deadzone_y = snapzone.y * abs_x; // ...on the value of the other axis
+
+    if (abs_x > deadzone_x)
+    {
+        result.x = joymaprange(abs_x, deadzone_x, sign_x);
+    }
+    if (abs_y > deadzone_y)
+    {
+        result.y = joymaprange(abs_y, deadzone_y, sign_y);
+    }
+
+    return result;
+};
+
+// exponent applied on stick magnitude based on github.com/yquake2/yquake2remaster
+static inline vec2f_t controlApplyExpo(vec2f_t input, vec2f_t exponent)
+{
+    vec2f_t result = {0.f, 0.f};
+    float magnitude = joydist(input);
+    if (magnitude == 0)
+    {
+        return result;
+    }
+
+    result.x = input.x * powf(magnitude, exponent.x) / magnitude;
+    result.y = input.y * powf(magnitude, exponent.y) / magnitude;
+    return result;
+};
+
+static inline void controlTransformToAxis(int index, int input, ControlInfo* const info)
+{
+    auto& a = joyAxes[index];
     auto const out = &a.axis;
 
     a.last = a.axis;
     *out = {};
 
-    int axisScaled10k = klabs(in * 10000 / 32767);
-
-    if (axisScaled10k >= a.saturation)
-        out->analog = 32767 * ksgn(in);
-    else
-    {
-        // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
-        if (index <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (index <= CONTROLLER_AXIS_RIGHTY)))
-            axisScaled10k = min(10000, joydist(joystick.pAxis[index & ~1], joystick.pAxis[index | 1]) * 10000 / 32767);
-
-        if (axisScaled10k < a.deadzone)
-            out->analog = 0;
-        else
-            out->analog = in * (axisScaled10k - a.deadzone) / a.saturation;
-    }
+    a.axis.analog = min(max(input, -MAXSCALEDCONTROLVALUE), MAXSCALEDCONTROLVALUE);
 
     if (controllerDigitizeAxis(index))
         CONTROL_LastSeenInput = LastSeenInput::Joystick;
@@ -514,6 +566,49 @@ static void controlUpdateAxisState(int index, ControlInfo *const info)
         case analog_moving:           info->dz     += a.axis.analog; break;
         default: break;
     }
+};
+
+static void controlUpdateTwinAxisState(int index, ControlInfo *const info)
+{
+    const float normalize_sdl_axis  =     1.f / 32767.f; // factor used to transform from SDL joystick input ([-32768, 32767]) to [-1, 1] range
+    const float normalize_10k_range = 10000.f / 32768.f; // factor used to convert old deadzone values to new float calculation
+
+    const vec2f_t deadzone   = {fix16_to_float(joyAxes[index].deadzone<<1)   / normalize_10k_range, fix16_to_float(joyAxes[index+1].deadzone<<1)   / normalize_10k_range};
+    const vec2f_t saturation = {fix16_to_float(joyAxes[index].saturation<<1) / normalize_10k_range, fix16_to_float(joyAxes[index+1].saturation<<1) / normalize_10k_range};
+    const vec2f_t snapzone   = {fix16_to_float(joyAxes[index].snapzone), fix16_to_float(joyAxes[index+1].snapzone)};
+    vec2f_t stick            = {float(joystick.pAxis[index]) * normalize_sdl_axis, float(joystick.pAxis[index+1]) * normalize_sdl_axis};
+
+    stick = controlRadialDeadzone(stick, deadzone);
+    stick = controlSlopedAxialDeadzone(stick, snapzone);
+    stick = controlApplyExpo(stick, saturation);
+    controlTransformToAxis(index,   int(stick.x / normalize_sdl_axis), info);
+    controlTransformToAxis(index+1, int(stick.y / normalize_sdl_axis), info);
+}
+
+static void controlUpdateAxisState(int index, ControlInfo* const info)
+{
+    int const  in  = joystick.pAxis[index];
+    auto &     a   = joyAxes[index];
+
+    int analog = 0;
+
+    int axisScaled10k = klabs(in * 10000 / 32767);
+
+    if (axisScaled10k >= a.saturation)
+        analog = 32767 * ksgn(in);
+    else
+    {
+        // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
+        if (index <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (index <= CONTROLLER_AXIS_RIGHTY)))
+            axisScaled10k = min(10000, joydist(joystick.pAxis[index & ~1], joystick.pAxis[index | 1]) * 10000 / 32767);
+
+        if (axisScaled10k < a.deadzone)
+            analog = 0;
+        else
+            analog = in * (axisScaled10k - a.deadzone) / a.saturation;
+    }
+
+    controlTransformToAxis(index, analog, info);
 }
 
 static void controlPollDevices(ControlInfo *const info)
@@ -530,8 +625,13 @@ static void controlPollDevices(ControlInfo *const info)
 
     if (CONTROL_JoystickEnabled)
     {
-        for (int i=joystick.numAxes-1; i>=0; i--)
-            controlUpdateAxisState(i, info);
+        for (int i=0; i<joystick.numAxes; i++)
+        {
+            if (i <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (i <= CONTROLLER_AXIS_RIGHTY)))
+                controlUpdateTwinAxisState(i++, info);
+            else
+                controlUpdateAxisState(i, info);
+        }
     }
 
     controlUpdateButtonStates();
