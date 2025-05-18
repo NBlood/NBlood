@@ -553,30 +553,38 @@ static inline void controlTransformToAxis(int index, int input, ControlInfo* con
 
 static void controlUpdateAxisState(int index, ControlInfo *const info, const bool bTwoAxis)
 {
-    static ControllerAxis joyAxesNull = {0}; // used for single axis
-    int const  in1 = joystick.pAxis[index];
-    auto &     a1  = joyAxes[index];
-    int const  in2 = bTwoAxis ? joystick.pAxis[index+1] : 0;
-    auto &     a2  = bTwoAxis ? joyAxes[index+1]        : joyAxesNull;
+    const float kSDLStickNorm =     1.f / 32767.f; // SDL stick range to 0-1
+    const float kDead10KRange = 10000.f / 32768.f; // convert old eduke deadzone values to new float calculation
 
-    a1.last = a1.axis;
+    vec2f_t fDead, fSat, fSnap, fStick;
+    auto      &a1 = joyAxes[index];
+    int const in1 = joystick.pAxis[index];
+
+    fDead.x  = fix16_to_float(a1.deadzone<<1)   / kDead10KRange;
+    fSat.x   = fix16_to_float(a1.saturation<<1) / kDead10KRange;
+    fSnap.x  = fix16_to_float(a1.snapzone);
+    fStick.x = float(in1) * kSDLStickNorm;
+
     if (bTwoAxis)
-        a2.last = a2.axis;
+    {
+        auto      &a2 = joyAxes[index+1];
+        int const in2 = joystick.pAxis[index+1];
 
-    const float norm_sdl_stick =     1.f / 32767.f; // SDL stick range to 0-1
-    const float norm_10k_range = 10000.f / 32768.f; // convert old eduke deadzone values to new float calculation
-
-    const vec2f_t fDead = {fix16_to_float(a1.deadzone<<1)   / norm_10k_range, fix16_to_float(a2.deadzone<<1)   / norm_10k_range};
-    const vec2f_t fSat  = {fix16_to_float(a1.saturation<<1) / norm_10k_range, fix16_to_float(a2.saturation<<1) / norm_10k_range};
-    const vec2f_t fSnap = {fix16_to_float(a1.snapzone), fix16_to_float(a2.snapzone)};
-    vec2f_t fStick      = {float(in1) * norm_sdl_stick, float(in2) * norm_sdl_stick};
+        fDead.y  = fix16_to_float(a2.deadzone<<1)   / kDead10KRange;
+        fSat.y   = fix16_to_float(a2.saturation<<1) / kDead10KRange;
+        fSnap.y  = fix16_to_float(a2.snapzone);
+        fStick.y = float(in2) * kSDLStickNorm;
+    }
+    else
+        fDead.y = fSat.y = fSnap.y = fStick.y = 0.f;
 
     fStick = controlCalDeadzone(fStick, fDead); // radial deadzone
-    fStick = controlCalSlopedScaledAxialDeadzone(fStick, fSnap); // sloped scaled axial deadzone
-    fStick = controlCalExpo(fStick, fSat); // exponent using stick magnitude
-    controlTransformToAxis(index,   int(fStick.x / norm_sdl_stick), info);
     if (bTwoAxis)
-        controlTransformToAxis(index+1, int(fStick.y / norm_sdl_stick), info);
+        fStick = controlCalSlopedScaledAxialDeadzone(fStick, fSnap); // sloped scaled axial deadzone
+    fStick = controlCalExpo(fStick, fSat); // exponent using stick magnitude
+    controlTransformToAxis(index, int(fStick.x / kSDLStickNorm), info);
+    if (bTwoAxis)
+        controlTransformToAxis(index+1, int(fStick.y / kSDLStickNorm), info);
 }
 
 static void controlPollDevices(ControlInfo *const info)
