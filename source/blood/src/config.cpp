@@ -385,7 +385,7 @@ void CONFIG_SetDefaults(void)
     gFov = 90;
     gCenterHoriz = 0;
     gDeliriumBlur = 1;
-    gViewSize = 2;
+    gViewSize = 3;
     gTurnSpeed = 92;
     gTurnAcceleration = 1;
     gCenterViewOnDrop = 0;
