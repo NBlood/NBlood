@@ -476,47 +476,43 @@ static int controllerDigitizeAxis(int axis)
 }
 
 static inline float joydist(vec2f_t stick) { return sqrtf(stick.x * stick.x + stick.y * stick.y); }
-static inline float joymaprange(float fVec, float fDead, float fSign) { return ((fVec - fDead) / (1.f - fDead)) * fSign; }
 
-// radial deadzone based on github.com/Minimuino/thumbstick-deadzones
-static vec2f_t controlCalDeadzone(const vec2f_t fInput, vec2f_t fDead)
+static inline vec2f_t controlCalDeadzone(const vec2f_t fInput, const vec2f_t fDead)
 {
     const float fMagnitude = min(joydist(fInput), 1.f);
 
     vec2f_t fOut = {0.f, 0.f};
-    if (fMagnitude > fDead.x)
-        fOut.x = fInput.x * joymaprange(fMagnitude, fDead.x, fMagnitude);
-    if (fMagnitude > fDead.y)
-        fOut.y = fInput.y * joymaprange(fMagnitude, fDead.y, fMagnitude);
+    if (fDead.x < fMagnitude)
+        fOut.x = fInput.x * ((fMagnitude - fDead.x) / (1.f - fDead.x) * fMagnitude);
+    if (fDead.y < fMagnitude)
+        fOut.y = fInput.y * ((fMagnitude - fDead.y) / (1.f - fDead.y) * fMagnitude);
     return fOut;
 };
 
-// sloped scaled axial deadzone based on github.com/Minimuino/thumbstick-deadzones
-static inline vec2f_t controlCalSlopedScaledAxialDeadzone(const vec2f_t fInput, vec2f_t fSnap)
+static inline vec2f_t controlCalSlopedScaledAxialDeadzone(const vec2f_t fInput, const vec2f_t fSnap)
 {
     const vec2f_t fAbs = {fabsf(fInput.x), fabsf(fInput.y)};
-    const vec2f_t fSign = {copysignf(1.f, fInput.x), copysignf(1.f, fInput.y)};
-    const vec2f_t fDead = {fSnap.x * fAbs.y, fSnap.y * fAbs.x}; // deadzone relies on opposite axis
+    const vec2f_t fDead = {fSnap.x * fAbs.y, fSnap.y * fAbs.x}; // deadzone uses opposite axis as input
 
     vec2f_t fOut = {0.f, 0.f};
-    if (fAbs.x > fDead.x)
-        fOut.x = joymaprange(fAbs.x, fDead.x, fSign.x);
-    if (fAbs.y > fDead.y)
-        fOut.y = joymaprange(fAbs.y, fDead.y, fSign.y);
+    if (fDead.x < fAbs.x)
+        fOut.x = (fAbs.x - fDead.x) / (1.f - fDead.x) * copysignf(1.f, fInput.x);
+    if (fDead.y < fAbs.y)
+        fOut.y = (fAbs.y - fDead.y) / (1.f - fDead.y) * copysignf(1.f, fInput.y);
     return fOut;
 };
 
-// exponent applied on stick magnitude based on github.com/Minimuino/thumbstick-deadzones
 static inline vec2f_t controlCalExpo(const vec2f_t fInput, const vec2f_t fExpo)
 {
     const float fMagnitude = joydist(fInput);
-    vec2f_t fOut = {0.f, 0.f};
 
+    vec2f_t fOut = {0.f, 0.f};
     if (fMagnitude == 0.f)
         return fOut;
 
-    const vec2f_t fInputNorm = {fInput.x * powf(fMagnitude, fExpo.x), fInput.y * powf(fMagnitude, fExpo.y)};
-    fOut = {fInputNorm.x / fMagnitude, fInputNorm.y / fMagnitude};
+    const vec2f_t fInputExpo = {fInput.x * powf(fMagnitude, fExpo.x), fInput.y * powf(fMagnitude, fExpo.y)};
+    fOut.x = fInputExpo.x / fMagnitude;
+    fOut.y = fInputExpo.y / fMagnitude;
     return fOut;
 };
 
