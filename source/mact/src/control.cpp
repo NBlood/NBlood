@@ -482,7 +482,6 @@ static inline float joymaprange(float fVec, float fDead, float fSign) { return (
 static vec2f_t controlCalDeadzone(const vec2f_t fInput, vec2f_t fDead)
 {
     const float fMagnitude = min(joydist(fInput), 1.f);
-    fDead = {clamp(fDead.x, 0.f, 0.99f), clamp(fDead.y, 0.f, 0.99f)}; // clamp to 0-0.99 range
 
     vec2f_t fOut = {0.f, 0.f};
     if (fMagnitude > fDead.x)
@@ -497,7 +496,6 @@ static inline vec2f_t controlCalSlopedScaledAxialDeadzone(const vec2f_t fInput, 
 {
     const vec2f_t fAbs = {fabsf(fInput.x), fabsf(fInput.y)};
     const vec2f_t fSign = {copysignf(1.f, fInput.x), copysignf(1.f, fInput.y)};
-    fSnap = {min(fSnap.x, 0.5f), min(fSnap.y, 0.5f)};
     const vec2f_t fDead = {fSnap.x * fAbs.y, fSnap.y * fAbs.x}; // deadzone relies on opposite axis
 
     vec2f_t fOut = {0.f, 0.f};
@@ -553,7 +551,7 @@ static inline void controlTransformToAxis(int index, int input, ControlInfo* con
 
 static void controlUpdateAxisState(int index, ControlInfo *const info, const bool bTwoAxis)
 {
-    const float kSDLStickNorm =     1.f / 32767.f; // SDL stick range to 0-1
+    const float kSDLStickNorm =     1.f / 32767.f; // convert SDL stick range (-32768/32767) to (-1/1)
     const float kDead10KRange = 10000.f / 32768.f; // convert old eduke deadzone values to new float calculation
 
     vec2f_t fDead, fSat, fSnap, fStick;
@@ -565,6 +563,10 @@ static void controlUpdateAxisState(int index, ControlInfo *const info, const boo
     fSnap.x  = fix16_to_float(a1.snapzone);
     fStick.x = float(in1) * kSDLStickNorm;
 
+    fDead.x  = min(fDead.x, 0.99f);
+    fSnap.x  = min(fSnap.x, 0.50f);
+    fStick.x = max(fStick.x, -1.f);
+
     if (bTwoAxis)
     {
         auto      &a2 = joyAxes[index+1];
@@ -574,6 +576,10 @@ static void controlUpdateAxisState(int index, ControlInfo *const info, const boo
         fSat.y   = fix16_to_float(a2.saturation<<1) / kDead10KRange;
         fSnap.y  = fix16_to_float(a2.snapzone);
         fStick.y = float(in2) * kSDLStickNorm;
+
+        fDead.y  = min(fDead.y, 0.99f);
+        fSnap.y  = min(fSnap.y, 0.50f);
+        fStick.y = max(fStick.y, -1.f);
     }
     else
         fDead.y = fSat.y = fSnap.y = fStick.y = 0.f;
