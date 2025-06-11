@@ -581,7 +581,7 @@ static void controlUpdateAxisState(int index, ControlInfo *const info, const boo
         fDead.y = fSat.y = fSnap.y = fStick.y = 0.f;
 
     fStick = controlCalDeadzone(fStick, fDead); // radial deadzone
-    if (bTwoAxis)
+    if (bTwoAxis && ((fSnap.x > 0.f) || (fSnap.y > 0.f))) // apply only if either stick has a snap value
         fStick = controlCalSlopedScaledAxialDeadzone(fStick, fSnap); // sloped scaled axial deadzone
     fStick = controlCalExpo(fStick, fSat); // exponent using stick magnitude
     controlTransformToAxis(index, int(fStick.x / kSDLStickNorm), info);
