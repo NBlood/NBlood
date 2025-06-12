@@ -475,6 +475,14 @@ static int controllerDigitizeAxis(int axis)
     return 0;
 }
 
+bool CONTROL_GetControllerAxisIsTwinAxisStick(int32_t whichaxis)
+{
+    if (!CONTROL_JoystickEnabled)
+        return false;
+    // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
+    return whichaxis <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (whichaxis <= CONTROLLER_AXIS_RIGHTY));
+}
+
 static inline float joydist(vec2f_t stick) { return sqrtf(stick.x * stick.x + stick.y * stick.y); }
 
 static inline vec2f_t controlCalDeadzone(const vec2f_t fInput, const vec2f_t fDead)
@@ -606,7 +614,7 @@ static void controlPollDevices(ControlInfo *const info)
         for (int i=0; i<joystick.numAxes; i++)
         {
             // this assumes there are two sticks comprised of axes 0 and 1, and 2 and 3... because when isGameController is true, there are
-            if (i <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (i <= CONTROLLER_AXIS_RIGHTY)))
+            if (CONTROL_GetControllerAxisIsTwinAxisStick(i))
             {
                 controlUpdateAxisState(i, info, TRUE); // do both axis
                 i++; // skip to next set of axis
