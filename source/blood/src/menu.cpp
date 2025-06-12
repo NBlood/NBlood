@@ -1620,7 +1620,7 @@ void SetupJoystickMenu(void)
         y += 17;
         pItemOptionsControlJoystickAxisSnapZone[nAxis] = new CGameMenuItemSlider("SNAP ZONE:", 1, 18, y, 280, &JoystickAnalogueSnap[nAxis], fix16_from_int(0), fix16_from_float(0.5f), fix16_from_float(0.05f), SetJoystickSnapZone, -1, -1, kMenuSliderPercent); // get snap axis zone
         dassert(pItemOptionsControlJoystickAxisSnapZone[nAxis] != NULL);
-        if (nAxis <= CONTROLLER_AXIS_LEFTY || (joystick.isGameController && (nAxis <= CONTROLLER_AXIS_RIGHTY))) // only add for analog stick axis
+        if (CONTROL_GetControllerAxisIsTwinAxisStick(nAxis)) // only add for analog stick axis
             menuOptionsControlJoystickAxis[nAxis].Add(pItemOptionsControlJoystickAxisSnapZone[nAxis], false);
         menuOptionsControlJoystickAxis[nAxis].Add(&itemBloodQAV, false);
     }
