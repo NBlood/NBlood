@@ -349,10 +349,10 @@ static const int32_t joystickanalogscaledefaults[MAXJOYAXES] =
 
 static const int32_t joystickanalogdeaddefaults[MAXJOYAXES] =
    {
-   DEFAULTJOYSTICKANALOGUEDEAD*5,
-   DEFAULTJOYSTICKANALOGUEDEAD*3,
-   DEFAULTJOYSTICKANALOGUEDEAD*3,
-   DEFAULTJOYSTICKANALOGUEDEAD*3,
+   fix16_from_float(0.2f),
+   fix16_from_float(0.15f),
+   fix16_from_float(0.15f),
+   fix16_from_float(0.15f),
    };
 
 
@@ -367,10 +367,10 @@ static const int32_t joystickanalogsnapzone[MAXJOYAXES] =
 
 static const int32_t joystickanalogsaturatedefaults[MAXJOYAXES] =
    {
-   DEFAULTJOYSTICKANALOGUESATURATE*3,
-   DEFAULTJOYSTICKANALOGUESATURATE*3,
-   DEFAULTJOYSTICKANALOGUESATURATE*1,
-   DEFAULTJOYSTICKANALOGUESATURATE*1,
+   fix16_from_float(0.35f),
+   fix16_from_float(0.35f),
+   fix16_from_float(0.125f),
+   fix16_from_float(0.125f),
    };
 
 
