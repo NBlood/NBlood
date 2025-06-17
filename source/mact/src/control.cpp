@@ -654,8 +654,9 @@ void CONTROL_GetAxisHeatMap(int32_t nAxis, uint8_t *tilePtr, int32_t nWidth, int
 
     const float xSlice = 2.f / float(nWidth);
     const float ySlice = 2.f / float(nHeight);
+    const float fRange = float(nPalRange);
     vec2f_t fStick;
-    uint8_t nDither = 0, palArray[256];
+    uint8_t palArray[256];
     uint8_t *tilePtrStart = tilePtr;
     for (int32_t nPal = 0; nPal <= nPalRange; nPal++) // set palette table
     {
@@ -671,9 +672,10 @@ void CONTROL_GetAxisHeatMap(int32_t nAxis, uint8_t *tilePtr, int32_t nWidth, int
             else
                 fStick.y = 0;
             fStick = controlCalAxisState(fStick, fDead, fSnap, fSat, bTwoAxis);
-            if (bDithering)
-                nDither = (nX&1) == (nY&1) ? 1 : 0;
-            *tilePtr = palArray[uint8_t(easeOutExpoHeatmapAndClamp(fStick.x) * float(nPalRange-nDither))&255];
+            uint8_t nPal = uint8_t(easeOutExpoHeatmapAndClamp(fStick.x) * fRange);
+            if (bDithering && (nPal > 0) && ((nX&1) == (nY&1)))
+                nPal -= 1;
+            *tilePtr = palArray[nPal];
         }
     }
     if (!bTwoAxis) // copy row for non-stick axis
