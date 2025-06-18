@@ -172,9 +172,6 @@ int credKOpen4Load(char *&pzFile)
     return nHandle;
 }
 
-#define kSMKPal 5
-#define kSMKTile (MAXTILES-1)
-
 char credPlaySmk(const char *_pzSMK, const char *_pzWAV, int nWav)
 {
 #if 0
