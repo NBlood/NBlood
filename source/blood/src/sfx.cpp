@@ -82,13 +82,13 @@ void Calc3DValues(BONKLE *pBonkle)
     lVol = Vol3d(angle - (gMe->pSprite->ang - 85), v18);
     int phaseLeft = mulscale16r(distanceL, pBonkle->format == 1 ? 4114 : 8228);
     lPitch = scale(pBonkle->pitch, dmulscale30r(cosVal, earVL.dx, sinVal, earVL.dy) + 5853, v8 + 5853);
-    lPitch = ClipRange(lPitch, 5000, 50000);
+    lPitch = ClipRange(lPitch, 1000, 50000);
 
     int distanceR = approxDist(pBonkle->curPos.x - earR.x, pBonkle->curPos.y - earR.y);
     rVol = Vol3d(angle - (gMe->pSprite->ang + 85), v14);
     int phaseRight = mulscale16r(distanceR, pBonkle->format == 1 ? 4114 : 8228);
     rPitch = scale(pBonkle->pitch, dmulscale30r(cosVal, earVR.dx, sinVal, earVR.dy) + 5853, v8 + 5853);
-    rPitch = ClipRange(rPitch, 5000, 50000);
+    rPitch = ClipRange(rPitch, 1000, 50000);
 
     int phaseMin = ClipHigh(phaseLeft, phaseRight);
     lPhase = phaseRight - phaseMin;
