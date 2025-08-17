@@ -82,6 +82,7 @@ enum INTERPOLATE_TYPE {
 #define kSBarNumberArmor2 9260
 #define kSBarNumberArmor3 9270
 #define kSBarNegative 9280
+#define kSBarKeyHolderAlt 9286
 
 #define kFontNum 5
 
