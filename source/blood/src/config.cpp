@@ -303,11 +303,7 @@ void CONFIG_SetDefaults(void)
     NumVoices = 64;
 #endif
 
-#ifdef GEKKO
     gSetup.usejoystick = 1;
-#else
-    gSetup.usejoystick = 0;
-#endif
     gSetup.joystickrumble = 0;
 
     gSetup.forcesetup       = 1;
