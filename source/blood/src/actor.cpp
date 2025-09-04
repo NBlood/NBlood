@@ -2575,11 +2575,11 @@ void actInit(bool bSaveLoad) {
                     xvel[nSprite] = yvel[nSprite] = zvel[nSprite] = 0;
 
                     #ifdef NOONE_EXTENSIONS
-                    if (!gModernMap) pXSprite->health = dudeInfo[nType].startHealth << 4;
+                    if (!gModernMap && !bSaveLoad) pXSprite->health = dudeInfo[nType].startHealth << 4;
                     else if (!bSaveLoad) // add a way to set custom hp for every enemy
                         pXSprite->health = nnExtDudeStartHealth(pSprite, pXSprite->sysData2);
                     #else
-                    pXSprite->health = dudeInfo[nType].startHealth << 4;
+                    if (!bSaveLoad) pXSprite->health = dudeInfo[nType].startHealth << 4;
                     #endif
 
                     switch (pSprite->type)
