@@ -14,6 +14,7 @@
 #include "renderlayer.h"
 #include "sdl_inc.h"
 #include "softsurface.h"
+#include "vk.h"
 
 #if SDL_MAJOR_VERSION >= 2
 # include "imgui.h"
@@ -109,6 +110,7 @@ static uint16_t sysgamma[3][256];
 #ifdef USE_OPENGL
 // OpenGL stuff
 char nogl=0;
+char usevulkan=1;
 #endif
 // last gamma, contrast
 static float lastvidgcb[2];
@@ -1698,7 +1700,10 @@ int setvideomode_sdlcommonpost(int32_t x, int32_t y, int32_t c, int32_t fs, int3
 
 #ifdef USE_OPENGL
     if (!nogl)
-        sdlayer_setvideomode_opengl();
+    {
+        if (!usevulkan)
+            sdlayer_setvideomode_opengl();
+    }
 #endif
 
     // save the current system gamma to determine if gamma is available
@@ -1854,66 +1859,103 @@ int32_t videoSetMode(int32_t x, int32_t y, int32_t c, int32_t fs)
         if (nogl)
             return -1;
 
-        struct glattribs
+        if (usevulkan)
         {
-            SDL_GLattr attr;
-            int32_t value;
-        } sdlayer_gl_attributes[] =
-        {
-              { SDL_GL_CONTEXT_FLAGS,
-#ifndef NDEBUG
-              SDL_GL_CONTEXT_DEBUG_FLAG |
-#endif
-              SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG },
-              { SDL_GL_CONTEXT_RESET_NOTIFICATION, SDL_GL_CONTEXT_RESET_LOSE_CONTEXT },
-              { SDL_GL_DOUBLEBUFFER, 1 },
+            SDL_Vulkan_LoadLibrary(NULL);
 
-              { SDL_GL_STENCIL_SIZE, 1 },
-              { SDL_GL_ACCELERATED_VISUAL, 1 },
-              { SDL_GL_DEPTH_SIZE, 24 },
-          };
+            sdl_window = SDL_CreateWindow("", g_windowPosValid ? g_windowPos.x : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display),
+                                              g_windowPosValid ? g_windowPos.y : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display), x, y,
+                                            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | borderless);
 
-        SDL_GL_ATTRIBUTES(i, sdlayer_gl_attributes);
+            if (!sdl_window)
+            {
+                LOG_F(ERROR, "Unable to set video mode: SDL_CreateWindow failed: %s.", SDL_GetError());
+                usevulkan = 0;
+            }
 
-        /* HACK: changing SDL GL attribs only works before surface creation,
-            so we have to create a new surface in a different format first
-            to force the surface we WANT to be recreated instead of reused. */
+            unsigned int ext_count;
+            SDL_Vulkan_GetInstanceExtensions(sdl_window, &ext_count, nullptr);
+            const char** ext = (const char**)Bmalloc(sizeof(const char*) * ext_count);
+            SDL_Vulkan_GetInstanceExtensions(sdl_window, &ext_count, ext);
+            PFN_vkGetInstanceProcAddr proc = (PFN_vkGetInstanceProcAddr)SDL_Vulkan_GetVkGetInstanceProcAddr();
 
-        sdl_window = SDL_CreateWindow("", g_windowPosValid ? g_windowPos.x : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display),
-                                          g_windowPosValid ? g_windowPos.y : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display), x, y,
-                                        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | borderless);
+            VkResult result;
+            if ((result = vk_initialize(ext_count, ext, proc)) != VK_SUCCESS)
+            {
+                LOG_F(ERROR, "Unable to set video mode: vulkan initialization failed: %d.", result);
+                usevulkan = 0;
+            }
+            if (usevulkan && !SDL_Vulkan_CreateSurface(sdl_window, vk_instance, &vk_surface))
+            {
+                LOG_F(ERROR, "Unable to set video mode: vulkan surface creation failed: %s.", SDL_GetError());
+                usevulkan = 0;
+            }
 
-        if (sdl_window)
-            sdl_context = SDL_GL_CreateContext(sdl_window);
-
-        if (!sdl_window || !sdl_context)
-        {
-            LOG_F(ERROR, "Unable to set video mode: %s failed: %s.", sdl_window ? "SDL_GL_CreateContext" : "SDL_GL_CreateWindow",  SDL_GetError());
-            nogl = 1;
+            Bfree(ext);
         }
+        if (!usevulkan)
+        {
+            struct glattribs
+            {
+                SDL_GLattr attr;
+                int32_t value;
+            } sdlayer_gl_attributes[] =
+            {
+                  { SDL_GL_CONTEXT_FLAGS,
+#ifndef NDEBUG
+                  SDL_GL_CONTEXT_DEBUG_FLAG |
+#endif
+                  SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG },
+                  { SDL_GL_CONTEXT_RESET_NOTIFICATION, SDL_GL_CONTEXT_RESET_LOSE_CONTEXT },
+                  { SDL_GL_DOUBLEBUFFER, 1 },
+
+                  { SDL_GL_STENCIL_SIZE, 1 },
+                  { SDL_GL_ACCELERATED_VISUAL, 1 },
+                  { SDL_GL_DEPTH_SIZE, 24 },
+              };
+
+            SDL_GL_ATTRIBUTES(i, sdlayer_gl_attributes);
+
+            /* HACK: changing SDL GL attribs only works before surface creation,
+                so we have to create a new surface in a different format first
+                to force the surface we WANT to be recreated instead of reused. */
+
+            sdl_window = SDL_CreateWindow("", g_windowPosValid ? g_windowPos.x : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display),
+                                              g_windowPosValid ? g_windowPos.y : (int)SDL_WINDOWPOS_CENTERED_DISPLAY(display), x, y,
+                                            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | borderless);
+
+            if (sdl_window)
+                sdl_context = SDL_GL_CreateContext(sdl_window);
+
+            if (!sdl_window || !sdl_context)
+            {
+                LOG_F(ERROR, "Unable to set video mode: %s failed: %s.", sdl_window ? "SDL_GL_CreateContext" : "SDL_GL_CreateWindow",  SDL_GetError());
+                nogl = 1;
+            }
 
 #ifndef EDUKE32_GLES
-        gladLoadGLLoader(SDL_GL_GetProcAddress);
+            gladLoadGLLoader(SDL_GL_GetProcAddress);
 #else
-        gladLoadGLES2Loader(SDL_GL_GetProcAddress);
+            gladLoadGLES2Loader(SDL_GL_GetProcAddress);
 #endif
-        if (GLVersion.major < 2)
-        {
-            LOG_F(ERROR, "Video driver does not support OpenGL version 2 or greater; all OpenGL modes are unavailable.");
-            nogl = 1;
+            if (GLVersion.major < 2)
+            {
+                LOG_F(ERROR, "Video driver does not support OpenGL version 2 or greater; all OpenGL modes are unavailable.");
+                nogl = 1;
+            }
+
+            if (nogl)
+            {
+                destroy_window_resources();
+                // If c == 8, retry without hardware accelaration
+                return videoSetMode(x, y, c, fs);
+            }
+
+            SDL_GL_SetSwapInterval(sdlayer_getswapinterval(vsync_renderlayer));
+            vsync_renderlayer = sdlayer_checkvsync(vsync_renderlayer);
+
+            engineSetupImGui();
         }
-
-        if (nogl)
-        {
-            destroy_window_resources();
-            // If c == 8, retry without hardware accelaration
-            return videoSetMode(x, y, c, fs);
-        }
-
-        SDL_GL_SetSwapInterval(sdlayer_getswapinterval(vsync_renderlayer));
-        vsync_renderlayer = sdlayer_checkvsync(vsync_renderlayer);
-
-        engineSetupImGui();
     }
     else
 #endif  // defined USE_OPENGL

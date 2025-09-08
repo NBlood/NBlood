@@ -221,6 +221,12 @@
     <ClCompile Include="..\..\source\build\src\loguru.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\source\build\src\vk.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\source\build\src\vma.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\source\build\include\a.h">
@@ -506,6 +512,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\build\include\xxhash_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\source\build\include\vk.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

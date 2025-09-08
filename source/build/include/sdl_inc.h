@@ -16,6 +16,7 @@
 # if SDL_TARGET == 2
 #  include <SDL2/SDL.h>
 #  include <SDL2/SDL_syswm.h>
+#  include <SDL2/SDL_vulkan.h>
 # else
 #  include <SDL/SDL.h>
 #  include <SDL/SDL_syswm.h>
