@@ -1,11 +1,40 @@
 #include <vector>
 #define VOLK_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #include <volk/volk.h>
 #include <vma/vk_mem_alloc.h>
 
 #include "compat.h"
 #include "log.h"
 #include "vk.h"
+
+static VmaAllocator vk_memmgr;
+
+struct VmaImage
+{
+	VkImage image;
+	VmaAllocation mem;
+
+	VkResult allocate(VkImageCreateInfo* info, VmaAllocationCreateInfo* vma_info = nullptr)
+	{
+		VmaAllocationCreateInfo null_info;
+		if (!vma_info)
+		{
+			null_info = {};
+			null_info.usage = VMA_MEMORY_USAGE_AUTO;
+			vma_info = &null_info;
+		}
+		return vmaCreateImage(vk_memmgr, info, vma_info, &image, &mem, nullptr);;
+	}
+
+	void destroy()
+	{
+		vmaDestroyImage(vk_memmgr, image, mem);
+		image = nullptr;
+		mem = nullptr;
+	}
+};
 
 VkInstance vk_instance;
 static bool volk_init;
@@ -17,6 +46,12 @@ static VkQueue vk_queue;
 static VkSurfaceKHR vk_surface;
 static VkSurfaceCapabilitiesKHR vk_surf_caps;
 static VkSwapchainKHR vk_swapchain;
+static VkImage* vk_color_image;
+static VkImageView* vk_color_image_view;
+static VmaImage vk_depth_image;
+static VkImageView vk_depth_image_view;
+static uint32_t vk_swapchain_image_cnt;
+static VkFormat vk_swapchain_format;
 
 #define VK_CHECKRESULT(x) {VkResult result = (x); if (result < 0) return result; }
 
@@ -240,24 +275,57 @@ VkResult vk_initialize_instance(uint32_t required_ext_num, const char** required
 		vkGetDeviceQueue(vk_device, vk_queue_family, 0, &vk_queue);
 	}
 
+	{
+		VmaVulkanFunctions vulkanFunctions = {};
+		vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+		vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo info = {};
+		info.vulkanApiVersion = VK_API_VERSION_1_0;
+		info.physicalDevice = vk_physical_device;
+		info.device = vk_device;
+		info.instance = vk_instance;
+		info.pVulkanFunctions = &vulkanFunctions;
+		VK_CHECKRESULT(vmaCreateAllocator(&info, &vk_memmgr));
+	}
+
 	return VK_SUCCESS;
 }
 
 void vk_shutdown_instance()
 {
-	if (vkDestroyDevice)
+	if (vk_device)
+	{
+		vkDeviceWaitIdle(vk_device);
+
+		vk_destroy_swapchain();
+
+		if (vk_memmgr)
+			vmaDestroyAllocator(vk_memmgr);
+
 		vkDestroyDevice(vk_device, nullptr);
+	}
 
 	vk_device = nullptr;
 
-	if (vkDestroyInstance)
+	if (vk_instance)
+	{
 		vkDestroyInstance(vk_instance, nullptr);
 
-	vk_instance = nullptr;
+		vk_instance = nullptr;
+	}
 }
 
 VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t height, uint32_t vsync)
 {
+	if (!vk_device)
+		return VK_ERROR_UNKNOWN;
+
+	if (vk_swapchain)
+	{
+		vk_destroy_swapchain();
+	}
+
 	vk_surface = surface;
 
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_physical_device, surface, &vk_surf_caps);
@@ -323,5 +391,84 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 
 	VK_CHECKRESULT(vkCreateSwapchainKHR(vk_device, &info, nullptr, &vk_swapchain));
 
+	vk_swapchain_format = format;
+
+	vk_swapchain_image_cnt = 0;
+	vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &vk_swapchain_image_cnt, nullptr);
+	vk_color_image = (VkImage*)Bmalloc(sizeof(VkImage) * vk_swapchain_image_cnt);
+	vkGetSwapchainImagesKHR(vk_device, vk_swapchain, &vk_swapchain_image_cnt, vk_color_image);
+
+	vk_color_image_view = (VkImageView*)Bmalloc(sizeof(VkImageView) * vk_swapchain_image_cnt);
+
+	for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
+	{
+		VkImageViewCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+		info.image = vk_color_image[i];
+		info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		info.format = format;
+		info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		info.subresourceRange.baseMipLevel = 0;
+		info.subresourceRange.levelCount = 1;
+		info.subresourceRange.baseArrayLayer = 0;
+		info.subresourceRange.layerCount = 1;
+
+		VK_CHECKRESULT(vkCreateImageView(vk_device, &info, nullptr, &vk_color_image_view[i]));
+	}
+
+
+	{
+		VkImageCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+		info.imageType = VK_IMAGE_TYPE_2D;
+		info.format = VK_FORMAT_D24_UNORM_S8_UINT;
+		info.extent.height = height;
+		info.extent.width = width;
+		info.extent.depth = 1;
+		info.mipLevels = 1;
+		info.arrayLayers = 1;
+		info.samples = VK_SAMPLE_COUNT_1_BIT;
+		info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		VK_CHECKRESULT(vk_depth_image.allocate(&info));
+
+		VkImageViewCreateInfo info_view = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+		info_view.image = vk_depth_image.image;
+		info_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		info_view.format = format;
+		info_view.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info_view.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info_view.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info_view.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+		info_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		info_view.subresourceRange.baseMipLevel = 0;
+		info_view.subresourceRange.levelCount = 1;
+		info_view.subresourceRange.baseArrayLayer = 0;
+		info_view.subresourceRange.layerCount = 1;
+
+		VK_CHECKRESULT(vkCreateImageView(vk_device, &info_view, nullptr, &vk_depth_image_view));
+	}
+
 	return VK_SUCCESS;
+}
+
+void vk_destroy_swapchain()
+{
+	if (!vk_swapchain)
+		return;
+	vkQueueWaitIdle(vk_queue);
+
+	vkDestroyImageView(vk_device, vk_depth_image_view, nullptr);
+	vk_depth_image.destroy();
+
+	for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
+		vkDestroyImageView(vk_device, vk_color_image_view[i], nullptr);
+
+	vkDestroySwapchainKHR(vk_device, vk_swapchain, nullptr);
+	vk_swapchain = nullptr;
 }
