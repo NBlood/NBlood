@@ -1880,18 +1880,24 @@ int32_t videoSetMode(int32_t x, int32_t y, int32_t c, int32_t fs)
             PFN_vkGetInstanceProcAddr proc = (PFN_vkGetInstanceProcAddr)SDL_Vulkan_GetVkGetInstanceProcAddr();
 
             VkResult result;
-            if ((result = vk_initialize(ext_count, ext, proc)) != VK_SUCCESS)
+            if ((result = vk_initialize_instance(ext_count, ext, proc)) < 0)
             {
                 LOG_F(ERROR, "Unable to set video mode: vulkan initialization failed: %d.", result);
                 usevulkan = 0;
             }
-            if (usevulkan && !SDL_Vulkan_CreateSurface(sdl_window, vk_instance, &vk_surface))
+            Bfree(ext);
+            VkSurfaceKHR surface;
+            if (usevulkan && !SDL_Vulkan_CreateSurface(sdl_window, vk_instance, &surface))
             {
-                LOG_F(ERROR, "Unable to set video mode: vulkan surface creation failed: %s.", SDL_GetError());
+                LOG_F(ERROR, "Unable to set video mode: sdl surface creation failed: %s.", SDL_GetError());
+                usevulkan = 0;
+            }
+            if (usevulkan && (result = vk_initialize_swapchain(surface, x, y, vsync_renderlayer)) < 0)
+            {
+                LOG_F(ERROR, "Unable to set video mode: vulkan swapchain creation failed: %d.", result);
                 usevulkan = 0;
             }
 
-            Bfree(ext);
         }
         if (!usevulkan)
         {

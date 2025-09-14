@@ -8,25 +8,23 @@
 #include "vk.h"
 
 VkInstance vk_instance;
-static uint32_t vk_layers_count;
-static VkLayerProperties* vk_layers;
-static uint32_t vk_extensions_count;
-static VkExtensionProperties* vk_extensions;
 static bool volk_init;
 static bool vk_validation = true;
 static VkPhysicalDevice vk_physical_device;
 static uint32_t vk_queue_family;
 static VkDevice vk_device;
 static VkQueue vk_queue;
-VkSurfaceKHR vk_surface;
+static VkSurfaceKHR vk_surface;
+static VkSurfaceCapabilitiesKHR vk_surf_caps;
+static VkSwapchainKHR vk_swapchain;
 
 #define VK_CHECKRESULT(x) {VkResult result = (x); if (result < 0) return result; }
 
-bool vk_check_layer(const char* layer)
+bool vk_check_layer(uint32_t layers_count, VkLayerProperties* layers, const char* layer)
 {
-	for (uint32_t i = 0; i < vk_layers_count; i++)
+	for (uint32_t i = 0; i < layers_count; i++)
 	{
-		if (!Bstrcmp(vk_layers[i].layerName, layer))
+		if (!Bstrcmp(layers[i].layerName, layer))
 		{
 			return true;
 		}
@@ -34,11 +32,11 @@ bool vk_check_layer(const char* layer)
 	return false;
 }
 
-bool vk_check_extension(const char* extension)
+bool vk_check_extension(uint32_t extensions_count, VkExtensionProperties* extensions, const char* extension)
 {
-	for (uint32_t i = 0; i < vk_extensions_count; i++)
+	for (uint32_t i = 0; i < extensions_count; i++)
 	{
-		if (!Bstrcmp(vk_extensions[i].extensionName, extension))
+		if (!Bstrcmp(extensions[i].extensionName, extension))
 		{
 			return true;
 		}
@@ -58,8 +56,14 @@ static VkBool32 vk_debug_callback(
 	return 1;
 }
 
-VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext, PFN_vkGetInstanceProcAddr proc)
+VkResult vk_initialize_instance(uint32_t required_ext_num, const char** required_ext, PFN_vkGetInstanceProcAddr proc)
 {
+	if (vk_instance && vk_device)
+	{
+		vkQueueWaitIdle(vk_queue);
+		return VK_SUCCESS;
+	}
+
 	if (!proc)
 		return VK_ERROR_UNKNOWN;
 
@@ -69,13 +73,26 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 		volk_init = true;
 	}
 
-	vkEnumerateInstanceLayerProperties(&vk_layers_count, nullptr);
-	vk_layers = (VkLayerProperties*)Bmalloc(sizeof(VkLayerProperties) * vk_layers_count);
-	vkEnumerateInstanceLayerProperties(&vk_layers_count, vk_layers);
+	uint32_t sup_layers_count = 0;
+	vkEnumerateInstanceLayerProperties(&sup_layers_count, nullptr);
+	VkLayerProperties* sup_layers = (VkLayerProperties*)Bmalloc(sizeof(VkLayerProperties) * sup_layers_count);
+	vkEnumerateInstanceLayerProperties(&sup_layers_count, sup_layers);
 
-	vkEnumerateInstanceExtensionProperties(nullptr, &vk_extensions_count, nullptr);
-	vk_extensions = (VkExtensionProperties*)Bmalloc(sizeof(VkExtensionProperties) * vk_extensions_count);
-	vkEnumerateInstanceExtensionProperties(nullptr, &vk_extensions_count, vk_extensions);
+	uint32_t sup_extensions_count = 0;
+	vkEnumerateInstanceExtensionProperties(nullptr, &sup_extensions_count, nullptr);
+	VkExtensionProperties* sup_extensions = (VkExtensionProperties*)Bmalloc(sizeof(VkExtensionProperties) * sup_extensions_count);
+	vkEnumerateInstanceExtensionProperties(nullptr, &sup_extensions_count, sup_extensions);
+
+	for (uint32_t i = 0; i < required_ext_num; i++)
+	{
+		if (!vk_check_extension(sup_extensions_count, sup_extensions, required_ext[i]))
+		{
+			Bfree(sup_layers);
+			Bfree(sup_extensions);
+			vk_shutdown_instance();
+			return VK_ERROR_UNKNOWN;
+		}
+	}
 
 	{
 		VkApplicationInfo app_info{ VK_STRUCTURE_TYPE_APPLICATION_INFO };
@@ -84,7 +101,7 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 		std::vector<const char*> layers;
 		std::vector<const char*> extensions;
 
-		if (vk_validation && vk_check_layer("VK_LAYER_KHRONOS_validation"))
+		if (vk_validation && vk_check_layer(sup_layers_count, sup_layers, "VK_LAYER_KHRONOS_validation"))
 		{
 			layers.push_back("VK_LAYER_KHRONOS_validation");
 		}
@@ -117,6 +134,9 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 		volkLoadInstance(vk_instance);
 	}
 
+	Bfree(sup_layers);
+	Bfree(sup_extensions);
+
 	{
 		uint32_t dev_count;
 		vkEnumeratePhysicalDevices(vk_instance, &dev_count, nullptr);
@@ -129,7 +149,7 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 
 		for (uint32_t i = 0; i < dev_count; i++)
 		{
-			uint32_t queue_prop_cnt;
+			uint32_t queue_prop_cnt = 0;
 			vkGetPhysicalDeviceQueueFamilyProperties(dev[i], &queue_prop_cnt, nullptr);
 			VkQueueFamilyProperties* queue_prop = (VkQueueFamilyProperties*)Bmalloc(sizeof(VkQueueFamilyProperties) * queue_prop_cnt);
 			vkGetPhysicalDeviceQueueFamilyProperties(dev[i], &queue_prop_cnt, queue_prop);
@@ -146,6 +166,17 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 			Bfree(queue_prop);
 
 			if (queue_family == UINT32_MAX)
+				continue;
+
+			uint32_t dev_ext_count = 0;
+			vkEnumerateDeviceExtensionProperties(dev[i], nullptr, &dev_ext_count, nullptr);
+			VkExtensionProperties* dev_extensions = (VkExtensionProperties*)Bmalloc(sizeof(VkExtensionProperties) * dev_ext_count);
+			vkEnumerateDeviceExtensionProperties(dev[i], nullptr, &dev_ext_count, dev_extensions);
+
+			bool ext_support = vk_check_extension(dev_ext_count, dev_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+			
+			Bfree(dev_extensions);
+			if (!ext_support)
 				continue;
 
 			VkPhysicalDeviceProperties props{};
@@ -180,10 +211,17 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 		Bfree(dev);
 
 		if (!vk_physical_device)
+		{
+			vk_shutdown_instance();
 			return VK_ERROR_UNKNOWN;
+		}
 	}
 
 	{
+		std::vector<const char*> extensions;
+
+		extensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
 		VkDeviceQueueCreateInfo queue_info{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
 		float queue_priority = 1.f;
 		queue_info.queueFamilyIndex = vk_queue_family;
@@ -194,6 +232,9 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 		info.queueCreateInfoCount = 1;
 		info.pQueueCreateInfos = &queue_info;
 
+		info.enabledExtensionCount = extensions.size();
+		info.ppEnabledExtensionNames = extensions.data();
+
 		VK_CHECKRESULT(vkCreateDevice(vk_physical_device, &info, nullptr, &vk_device));
 		
 		vkGetDeviceQueue(vk_device, vk_queue_family, 0, &vk_queue);
@@ -202,26 +243,85 @@ VkResult vk_initialize(unsigned int required_ext_num, const char** required_ext,
 	return VK_SUCCESS;
 }
 
-void vk_shutdown()
+void vk_shutdown_instance()
 {
-	if (!volk_init)
-		return;
+	if (vkDestroyDevice)
+		vkDestroyDevice(vk_device, nullptr);
 
-	vkDestroyDevice(vk_device, nullptr);
+	vk_device = nullptr;
 
-	vkDestroyInstance(vk_instance, nullptr);
+	if (vkDestroyInstance)
+		vkDestroyInstance(vk_instance, nullptr);
 
-	if (vk_layers_count)
+	vk_instance = nullptr;
+}
+
+VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t height, uint32_t vsync)
+{
+	vk_surface = surface;
+
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_physical_device, surface, &vk_surf_caps);
+
+	uint32_t surface_formats_count = 0;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(vk_physical_device, surface, &surface_formats_count, nullptr);
+	VkSurfaceFormatKHR* surface_formats = (VkSurfaceFormatKHR*)Bmalloc(sizeof(VkSurfaceFormatKHR) * surface_formats_count);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(vk_physical_device, surface, &surface_formats_count, surface_formats);
+
+	VkFormat format = VK_FORMAT_UNDEFINED;
+
+	for (uint32_t i = 0; i < surface_formats_count; i++)
 	{
-		vk_layers_count = 0;
-		Bfree(vk_layers);
+		switch (surface_formats[i].format)
+		{
+			case VK_FORMAT_B8G8R8A8_UNORM:
+			case VK_FORMAT_R8G8B8A8_UNORM:
+				format = surface_formats[i].format;
+				break;
+		}
+		if (format != VK_FORMAT_UNDEFINED)
+			break;
+	}
+	Bfree(surface_formats);
+	if (format == VK_FORMAT_UNDEFINED)
+	{
+		return VK_ERROR_UNKNOWN;
 	}
 
-	if (vk_extensions_count)
-	{
-		vk_extensions_count = 0;
-		Bfree(vk_extensions);
-	}
+	VkSwapchainCreateInfoKHR info = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 
-	vkDestroyInstance(vk_instance, NULL);
+	uint32_t imageCnt = 3;
+	if (imageCnt < vk_surf_caps.minImageCount)
+		imageCnt = vk_surf_caps.minImageCount;
+	if (imageCnt > vk_surf_caps.maxImageCount)
+		imageCnt = vk_surf_caps.maxImageCount;
+
+	info.surface = surface;
+	info.minImageCount = imageCnt;
+	info.imageFormat = format;
+	info.imageExtent.height = height;
+	info.imageExtent.width = width;
+	info.imageArrayLayers = 1;
+	info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	info.preTransform = vk_surf_caps.currentTransform;
+	info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	switch (vsync)
+	{
+		case -1: // adaptive:
+			info.presentMode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+			break;
+		case 0: // disabled:
+		default:
+			info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+			break;
+		case 1:
+		case 2:
+			info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+			break;
+	}
+	info.clipped = VK_TRUE;
+
+	VK_CHECKRESULT(vkCreateSwapchainKHR(vk_device, &info, nullptr, &vk_swapchain));
+
+	return VK_SUCCESS;
 }
