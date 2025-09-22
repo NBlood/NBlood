@@ -82,7 +82,7 @@ static float dxb1[MAXWALLSB], dxb2[MAXWALLSB];
 
 //POGOTODO: the SCISDIST could be set to 0 now to allow close objects to render properly,
 //          but there's a nasty rendering bug that needs to be dug into when setting SCISDIST lower than 1
-#define SCISDIST 0.1f  //close plane clipping distance
+#define SCISDIST 1.f  //close plane clipping distance
 
 #define SOFTROTMAT 0
 
