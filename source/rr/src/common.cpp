@@ -888,6 +888,17 @@ void G_AddSearchPaths(void)
         Bstrncpy(suffix, "/WW2GI", remaining);
         addsearchpath_user(buf, SEARCHPATH_WW2GI);
     }
+    
+    // WWII GI - GOG.com
+    bufsize = sizeof(buf);
+    if (Paths_ReadRegistryValue(R"(SOFTWARE\GOG.com\Games\1625778777)", "path", buf, &bufsize))
+    {
+        char * const suffix = buf + bufsize - 1;
+        DWORD const remaining = sizeof(buf) - bufsize;
+
+        Bstrncpy(suffix, "/WW2GI", remaining);
+        addsearchpath_user(buf, SEARCHPATH_WW2GI);
+    }
 #endif
 #endif
 #endif
