@@ -563,6 +563,7 @@ void CDemo::FlushInput(int nCount)
         bitWriter.writeBit(pInput->keyFlags.pause);
         bitWriter.writeBit(pInput->keyFlags.quit);
         bitWriter.writeBit(pInput->keyFlags.restart);
+        bitWriter.writeBit(pInput->keyFlags.lastWeapon);
         bitWriter.writeBit(pInput->useFlags.useBeastVision);
         bitWriter.writeBit(pInput->useFlags.useCrystalBall);
         bitWriter.writeBit(pInput->useFlags.useJumpBoots);
@@ -617,6 +618,7 @@ void CDemo::ReadInput(int nCount)
             pInput->keyFlags.pause = bitReader.readBit();
             pInput->keyFlags.quit = bitReader.readBit();
             pInput->keyFlags.restart = bitReader.readBit();
+            pInput->keyFlags.lastWeapon = 0;
             bitReader.skipBits(17);
             pInput->useFlags.useBeastVision = bitReader.readBit();
             pInput->useFlags.useCrystalBall = bitReader.readBit();
@@ -667,6 +669,7 @@ void CDemo::ReadInput(int nCount)
             pInput->keyFlags.pause = bitReader.readBit();
             pInput->keyFlags.quit = bitReader.readBit();
             pInput->keyFlags.restart = bitReader.readBit();
+            pInput->keyFlags.lastWeapon = bitReader.readBit();
             pInput->useFlags.useBeastVision = bitReader.readBit();
             pInput->useFlags.useCrystalBall = bitReader.readBit();
             pInput->useFlags.useJumpBoots = bitReader.readBit();

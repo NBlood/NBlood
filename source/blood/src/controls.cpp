@@ -124,6 +124,7 @@ void ctrlInit(void)
     CONTROL_DefineFlag(gamefunc_Toggle_Crosshair, false);
     CONTROL_DefineFlag(gamefunc_Next_Weapon, false);
     CONTROL_DefineFlag(gamefunc_Previous_Weapon, false);
+    CONTROL_DefineFlag(gamefunc_Last_Weapon, false);
     CONTROL_DefineFlag(gamefunc_Holster_Weapon, false);
     CONTROL_DefineFlag(gamefunc_Show_Opponents_Weapon, false);
     CONTROL_DefineFlag(gamefunc_BeastVision, false);
@@ -297,6 +298,12 @@ void ctrlGetInput(void)
     {
         CONTROL_ClearButton(gamefunc_Previous_Weapon);
         gInput.keyFlags.prevWeapon = 1;
+    }
+
+    if (BUTTON(gamefunc_Last_Weapon))
+    {
+        CONTROL_ClearButton(gamefunc_Last_Weapon);
+        gInput.keyFlags.lastWeapon = 1;
     }
 
     if (BUTTON(gamefunc_Show_Opponents_Weapon))

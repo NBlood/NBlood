@@ -775,6 +775,7 @@ void StartLevel(GAMEOPTIONS *gameOptions)
             pPlayer->qavLoop = gPlayerTemp[i].qavLoop;
             pPlayer->weaponTimer = gPlayerTemp[i].weaponTimer;
             pPlayer->nextWeapon = gPlayerTemp[i].nextWeapon;
+            pPlayer->lastWeapon = gPlayerTemp[i].lastWeapon;
         }
     }
     gameOptions->uGameFlags &= ~(kGameFlagContinuing|kGameFlagEnding);

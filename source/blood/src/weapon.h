@@ -35,6 +35,7 @@ void WeaponInit(void);
 void WeaponDraw(PLAYER *pPlayer, int a2, int a3, int a4, int a5);
 void WeaponRaise(PLAYER *pPlayer);
 void WeaponLower(PLAYER *pPlayer);
+char WeaponIsEquipable(PLAYER *pPlayer, int nWeapon, char checkUnderwater = true);
 char WeaponUpgrade(PLAYER *pPlayer, char newWeapon);
 void WeaponProcess(PLAYER *pPlayer);
 void WeaponUpdateState(PLAYER* pPlayer);

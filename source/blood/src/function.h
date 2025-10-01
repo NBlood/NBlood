@@ -35,7 +35,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 extern "C" {
 #endif
 
-#define NUMGAMEFUNCTIONS 58
+#define NUMGAMEFUNCTIONS 59
 #define MAXGAMEFUNCLEN 32
 
 extern char gamefunctions[NUMGAMEFUNCTIONS][MAXGAMEFUNCLEN];
@@ -91,6 +91,7 @@ enum GameFunction_t
    gamefunc_Toggle_Crosshair,
    gamefunc_Next_Weapon,
    gamefunc_Previous_Weapon,
+   gamefunc_Last_Weapon,
    gamefunc_Holster_Weapon,
    gamefunc_Show_Opponents_Weapon,
    gamefunc_BeastVision,

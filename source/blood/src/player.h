@@ -206,7 +206,7 @@ struct PLAYER
     int                 gooTime;    // --> useless
     int                 wetTime;    // --> useless
     int                 bubbleTime;
-    int                 at306;  // --> useless
+    int                 lastWeapon; // at306;
     int                 restTime;
     int                 kickPower;
     int                 laughCount;

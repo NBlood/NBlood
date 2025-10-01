@@ -1772,6 +1772,23 @@ void FireBeast(int nTrigger, PLAYER * pPlayer)
     actFireVector(pPlayer->pSprite, 0, pPlayer->zWeapon-pPlayer->pSprite->z, pPlayer->aim.dx+r1, pPlayer->aim.dy+r2, pPlayer->aim.dz+r3, kVectorBeastSlash);
 }
 
+char WeaponIsEquipable(PLAYER *pPlayer, int nWeapon, char checkUnderwater = true)
+{
+    if (!(nWeapon >= kWeaponPitchfork && nWeapon <= kWeaponRemoteTNT)) // invalid weapon
+        return 0;
+    if (checkUnderwater && pPlayer->isUnderwater && BannedUnderwater(nWeapon))
+        return 0;
+    if (pPlayer->hasWeapon[nWeapon])
+    {
+        for (int j = 0; j < weaponModes[nWeapon].at0; j++)
+        {
+            if (CheckWeaponAmmo(pPlayer, nWeapon, weaponModes[nWeapon].at4, 1))
+                return 1;
+        }
+    }
+    return 0;
+}
+
 char gWeaponUpgrade[][13] = {
     { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
     { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
@@ -2053,6 +2070,7 @@ void WeaponProcess(PLAYER *pPlayer) {
     }
     #endif
 
+    char bAlreadySetLastWeapon = 0;
     char bTNTRemoteProxyCycling = 1;
     if (pPlayer->pXSprite->health == 0)
     {
@@ -2061,6 +2079,7 @@ void WeaponProcess(PLAYER *pPlayer) {
     }
     if (pPlayer->isUnderwater && BannedUnderwater(pPlayer->curWeapon))
     {
+        pPlayer->lastWeapon = pPlayer->curWeapon;
         if (checkLitSprayOrTNT(pPlayer))
         {
             if (pPlayer->curWeapon == kWeaponSprayCan)
@@ -2147,6 +2166,33 @@ void WeaponProcess(PLAYER *pPlayer) {
     {
         pPlayer->input.keyFlags.nextWeapon = 0;
         pPlayer->input.keyFlags.prevWeapon = 0;
+        pPlayer->input.keyFlags.lastWeapon = 0;
+    }
+    if (pPlayer->input.keyFlags.lastWeapon)
+    {
+        pPlayer->input.keyFlags.lastWeapon = 0;
+        if (!VanillaMode())
+        {
+            const int weapon = pPlayer->curWeapon;
+            if (weapon && (weapon != pPlayer->lastWeapon)) // if current weapon is different to last weapon
+            {
+                if (WeaponIsEquipable(pPlayer, pPlayer->lastWeapon)) // if last weapon can be switched to
+                {
+                    pPlayer->input.keyFlags.nextWeapon = 0;
+                    pPlayer->input.keyFlags.prevWeapon = 0;
+                    pPlayer->nextWeapon = kWeaponNone;
+                    pPlayer->weaponMode[pPlayer->lastWeapon] = 0;
+                    pPlayer->input.newWeapon = pPlayer->lastWeapon;
+                    pPlayer->lastWeapon = weapon;
+                    bAlreadySetLastWeapon = 1;
+                    bTNTRemoteProxyCycling = 0;
+                }
+            }
+        }
+        else
+        {
+            viewSetMessage("Last weapon button disabled for vanilla mode...", 0, MESSAGE_PRIORITY_PICKUP);
+        }
     }
     const KEYFLAGS oldKeyFlags = pPlayer->input.keyFlags; // used to fix next/prev weapon issue for banned weapons
     if (pPlayer->input.keyFlags.nextWeapon)
@@ -2218,6 +2264,7 @@ void WeaponProcess(PLAYER *pPlayer) {
         pPlayer->weaponMode[weapon] = t;
         if (pPlayer->curWeapon)
         {
+            pPlayer->lastWeapon = pPlayer->curWeapon;
             WeaponLower(pPlayer);
             pPlayer->nextWeapon = weapon;
             return;
@@ -2342,6 +2389,8 @@ void WeaponProcess(PLAYER *pPlayer) {
             int v6c = (pPlayer->weaponMode[nWeapon]+i)%v4c;
             if (CheckWeaponAmmo(pPlayer, nWeapon, weaponModes[nWeapon].at4, 1))
             {
+                if (!bAlreadySetLastWeapon) // set new weapon to last weapon slot
+                    pPlayer->lastWeapon = pPlayer->curWeapon;
                 WeaponLower(pPlayer);
                 pPlayer->weaponMode[nWeapon] = v6c;
                 return;

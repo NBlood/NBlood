@@ -58,6 +58,7 @@ union KEYFLAGS
         unsigned int pause : 1;
         unsigned int quit : 1;
         unsigned int restart : 1;
+        unsigned int lastWeapon : 1; // new to nblood
     };
 };
 
