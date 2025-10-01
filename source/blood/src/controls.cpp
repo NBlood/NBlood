@@ -163,7 +163,11 @@ void ctrlGetInput(void)
     auto const    currentHiTicks    = timerGetFractionalTicks();
     double const  elapsedInputTicks = currentHiTicks - lastInputTicks;
 
+    static int32_t lastInputClock;  // MED
+    int32_t const  elapsedTics = (int32_t)totalclock - lastInputClock;
+
     lastInputTicks = currentHiTicks;
+    lastInputClock = (int32_t) totalclock;
 
     auto scaleAdjustmentToInterval = [=](double x) { return x * kTicsPerSec / (1000.0 / elapsedInputTicks); };
 
@@ -262,7 +266,7 @@ void ctrlGetInput(void)
         }
         if (gViewMode == 2 || gViewMode == 4)
         {
-            gZoom = ClipLow(gZoom - (gZoom >> 4), 64);
+            gZoom = ClipLow(gZoom - (elapsedTics<<5), 64);
             gViewMap.nZoom = gZoom;
         }
     }
@@ -276,7 +280,7 @@ void ctrlGetInput(void)
         }
         if (gViewMode == 2 || gViewMode == 4)
         {
-            gZoom = ClipHigh(gZoom + (gZoom >> 4), 4096);
+            gZoom = ClipHigh(gZoom + (elapsedTics<<5), 4096);
             gViewMap.nZoom = gZoom;
         }
     }
@@ -475,10 +479,6 @@ void ctrlGetInput(void)
     }
 
     static int32_t turnHeldTime;
-    static int32_t lastInputClock;  // MED
-    int32_t const  elapsedTics = (int32_t)totalclock - lastInputClock;
-
-    lastInputClock = (int32_t) totalclock;
 
     if (turnLeft || turnRight)
         turnHeldTime += elapsedTics;
