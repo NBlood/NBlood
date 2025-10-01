@@ -34,6 +34,7 @@ extern char quitevent, appactive;
 extern char modechange;
 #ifdef USE_OPENGL
 extern char nogl;
+extern char usevulkan;
 #else
 #define nogl (1)
 #endif

@@ -495,6 +495,8 @@ static GLuint polymost2_compileShader(GLenum shaderType, const char* const sourc
 
 void polymost_glreset()
 {
+    if (usevulkan)
+        return;
     buildgl_resetStateAccounting();
     if (!nogl)
         buildgl_activeTexture(GL_TEXTURE0);
@@ -798,6 +800,8 @@ void polymost_setVisibility(float visibility)
 
 void polymost_setFogEnabled(char fogEnabled)
 {
+    if (usevulkan)
+        return;
     if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || fogEnabled == polymost1FogEnabled)
         return;
 
@@ -957,6 +961,8 @@ void polymost_initdrawpoly(void)
 
 void polymost_glinit()
 {
+    if (usevulkan)
+        return;
     buildgl_resetStateAccounting();
 
     glHint(GL_FOG_HINT, GL_NICEST);
@@ -6894,6 +6900,8 @@ static void polymost_initmosts(const float * px, const float * py, int const n)
 
 void polymost_drawrooms()
 {
+    if (usevulkan)
+        return;
     MICROPROFILE_SCOPEI("Engine", EDUKE32_FUNCTION, MP_AUTO);
 
     if (videoGetRenderMode() == REND_CLASSIC) return;
@@ -9192,6 +9200,8 @@ void polymost_dorotatesprite(int32_t sx, int32_t sy, int32_t z, int16_t a, int16
                              int8_t dashade, char dapalnum, int32_t dastat, uint8_t daalpha, uint8_t dablend,
                              int32_t cx1, int32_t cy1, int32_t cx2, int32_t cy2, int32_t uniqid)
 {
+    if (usevulkan)
+        return;
     if (usemodels && tile2model[picnum].hudmem[(dastat&4)>>2])
     {
         polymost_dorotatespritemodel(sx, sy, z, a, picnum, dashade, dapalnum, dastat, daalpha, dablend, uniqid);

@@ -2118,6 +2118,13 @@ void videoShowFrame(int32_t w)
 #endif
 
 #ifdef USE_OPENGL
+    if (usevulkan)
+    {
+        vk_next_page();
+
+        MicroProfileFlip();
+        return;
+    }
     if (!nogl)
     {
         if (bpp > 8)

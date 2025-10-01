@@ -9,6 +9,9 @@
 #include "log.h"
 #include "vk.h"
 
+#define VK_CHECKRESULT(x) {VkResult result = (x); if (result < 0) return result; }
+#define VK_FRAMES_IN_FLIGHT 2
+
 static VmaAllocator vk_memmgr;
 
 struct VmaImage
@@ -52,8 +55,20 @@ static VmaImage vk_depth_image;
 static VkImageView vk_depth_image_view;
 static uint32_t vk_swapchain_image_cnt;
 static VkFormat vk_swapchain_format;
+static bool frame_acquired;
+static VkSemaphore vk_acquire_semaphore[VK_FRAMES_IN_FLIGHT];
+static VkSemaphore* vk_finish_semaphore;
+static VkFence vk_cmd_fence[VK_FRAMES_IN_FLIGHT];
+static VkCommandPool vk_cmd_pool[VK_FRAMES_IN_FLIGHT];
+static VkCommandBuffer vk_cmd_buffer[VK_FRAMES_IN_FLIGHT];
+static VkCommandBuffer vk_cmd;
+static uint32_t vk_frame_id;
+static uint32_t vk_swapchain_id;
+static VkDebugUtilsMessengerEXT vk_dbg_messenger;
+static VkFramebuffer* vk_framebuffer;
 
-#define VK_CHECKRESULT(x) {VkResult result = (x); if (result < 0) return result; }
+VkResult vk_initialize_per_frame();
+void vk_destroy_per_frame();
 
 bool vk_check_layer(uint32_t layers_count, VkLayerProperties* layers, const char* layer)
 {
@@ -86,7 +101,12 @@ static VkBool32 vk_debug_callback(
 	void* user_data)
 {
 	if (callback_data && callback_data->pMessage)
+	{
+#ifdef _WIN32
+		OutputDebugStringA(callback_data->pMessage);
+#endif
 		LOG_F(ERROR, "Vulkan: %s\n", callback_data->pMessage);
+	}
 
 	return 1;
 }
@@ -147,16 +167,20 @@ VkResult vk_initialize_instance(uint32_t required_ext_num, const char** required
 		{
 			extensions.push_back(required_ext[i]);
 		}
-		VkDebugUtilsMessengerCreateInfoEXT info_debug{ VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
+		VkDebugUtilsMessengerCreateInfoEXT info_debug = { VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
 		if (vk_validation)
 		{
 			extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-			info_debug.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_FLAG_BITS_MAX_ENUM_EXT;
-			info_debug.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_FLAG_BITS_MAX_ENUM_EXT;
+			info_debug.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+				| VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			info_debug.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+				| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+				| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 			info_debug.pfnUserCallback = vk_debug_callback;
+			info.pNext = &info_debug;
 		}
 
-		app_info.apiVersion = VK_VERSION_1_0;
+		app_info.apiVersion = VK_API_VERSION_1_0;
 
 		info.pApplicationInfo = &app_info;
 		info.enabledLayerCount = layers.size();
@@ -167,6 +191,11 @@ VkResult vk_initialize_instance(uint32_t required_ext_num, const char** required
 		VK_CHECKRESULT(vkCreateInstance(&info, nullptr, &vk_instance));
 
 		volkLoadInstance(vk_instance);
+
+		if (vk_validation)
+		{
+			vkCreateDebugUtilsMessengerEXT(vk_instance, &info_debug, nullptr, &vk_dbg_messenger);
+		}
 	}
 
 	Bfree(sup_layers);
@@ -289,6 +318,8 @@ VkResult vk_initialize_instance(uint32_t required_ext_num, const char** required
 		VK_CHECKRESULT(vmaCreateAllocator(&info, &vk_memmgr));
 	}
 
+	VK_CHECKRESULT(vk_initialize_per_frame());
+
 	return VK_SUCCESS;
 }
 
@@ -299,6 +330,7 @@ void vk_shutdown_instance()
 		vkDeviceWaitIdle(vk_device);
 
 		vk_destroy_swapchain();
+		vk_destroy_per_frame();
 
 		if (vk_memmgr)
 			vmaDestroyAllocator(vk_memmgr);
@@ -310,6 +342,8 @@ void vk_shutdown_instance()
 
 	if (vk_instance)
 	{
+		if (vk_validation)
+			vkDestroyDebugUtilsMessengerEXT(vk_instance, vk_dbg_messenger, nullptr);
 		vkDestroyInstance(vk_instance, nullptr);
 
 		vk_instance = nullptr;
@@ -341,10 +375,10 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	{
 		switch (surface_formats[i].format)
 		{
-			case VK_FORMAT_B8G8R8A8_UNORM:
-			case VK_FORMAT_R8G8B8A8_UNORM:
-				format = surface_formats[i].format;
-				break;
+		case VK_FORMAT_B8G8R8A8_UNORM:
+		case VK_FORMAT_R8G8B8A8_UNORM:
+			format = surface_formats[i].format;
+			break;
 		}
 		if (format != VK_FORMAT_UNDEFINED)
 			break;
@@ -375,17 +409,17 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	switch (vsync)
 	{
-		case -1: // adaptive:
-			info.presentMode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-			break;
-		case 0: // disabled:
-		default:
-			info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-			break;
-		case 1:
-		case 2:
-			info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-			break;
+	case -1: // adaptive:
+		info.presentMode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+		break;
+	case 0: // disabled:
+	default:
+		info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+		break;
+	case 1:
+	case 2:
+		info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+		break;
 	}
 	info.clipped = VK_TRUE;
 
@@ -440,18 +474,35 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 		VkImageViewCreateInfo info_view = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 		info_view.image = vk_depth_image.image;
 		info_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		info_view.format = format;
+		info_view.format = VK_FORMAT_D24_UNORM_S8_UINT;
 		info_view.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 		info_view.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 		info_view.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
 		info_view.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-		info_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		info_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 		info_view.subresourceRange.baseMipLevel = 0;
 		info_view.subresourceRange.levelCount = 1;
 		info_view.subresourceRange.baseArrayLayer = 0;
 		info_view.subresourceRange.layerCount = 1;
 
 		VK_CHECKRESULT(vkCreateImageView(vk_device, &info_view, nullptr, &vk_depth_image_view));
+	}
+
+	{
+		vk_finish_semaphore = (VkSemaphore*)Bmalloc(sizeof(VkSemaphore) * vk_swapchain_image_cnt);
+
+		VkSemaphoreCreateInfo info = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
+		{
+			VK_CHECKRESULT(vkCreateSemaphore(vk_device, &info, nullptr, &vk_finish_semaphore[i]));
+		}
+	}
+
+	{
+		vk_framebuffer = (VkFramebuffer*)Bmalloc(sizeof(VkFramebuffer) * vk_swapchain_image_cnt);
+
+		VkFramebufferCreateInfo info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+
 	}
 
 	return VK_SUCCESS;
@@ -471,4 +522,107 @@ void vk_destroy_swapchain()
 
 	vkDestroySwapchainKHR(vk_device, vk_swapchain, nullptr);
 	vk_swapchain = nullptr;
+
+	if (vk_finish_semaphore)
+	{
+		for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
+			vkDestroySemaphore(vk_device, vk_finish_semaphore[i], nullptr);
+		Bfree(vk_finish_semaphore);
+		vk_finish_semaphore = nullptr;
+	}
+}
+
+VkResult vk_initialize_per_frame()
+{
+	{
+		VkSemaphoreCreateInfo info = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		VkFenceCreateInfo info_fence = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+		info_fence.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+		for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
+		{
+			VK_CHECKRESULT(vkCreateSemaphore(vk_device, &info, nullptr, &vk_acquire_semaphore[i]));
+			VK_CHECKRESULT(vkCreateFence(vk_device, &info_fence, nullptr, &vk_cmd_fence[i]));
+		}
+	}
+
+	{
+		VkCommandPoolCreateInfo info_pool = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+		info_pool.queueFamilyIndex = vk_queue_family;
+		info_pool.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+
+		VkCommandBufferAllocateInfo info_alloc = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+		info_alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		info_alloc.commandBufferCount = 1;
+
+		for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
+		{
+			VK_CHECKRESULT(vkCreateCommandPool(vk_device, &info_pool, nullptr, &vk_cmd_pool[i]));
+			info_alloc.commandPool = vk_cmd_pool[i];
+			VK_CHECKRESULT(vkAllocateCommandBuffers(vk_device, &info_alloc, &vk_cmd_buffer[i]));
+		}
+	}
+
+	vk_frame_id = 0;
+}
+
+void vk_destroy_per_frame()
+{
+	for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
+	{
+		vkDestroySemaphore(vk_device, vk_finish_semaphore[i], nullptr);
+		vkDestroyFence(vk_device, vk_cmd_fence[i], nullptr);
+
+		vkDestroyCommandPool(vk_device, vk_cmd_pool[i], nullptr);
+	}
+}
+
+void vk_ensure_rendering()
+{
+	if (frame_acquired)
+		return;
+
+	vkWaitForFences(vk_device, 1, &vk_cmd_fence[vk_frame_id], VK_TRUE, UINT64_MAX);
+	vkResetFences(vk_device, 1, &vk_cmd_fence[vk_frame_id]);
+
+	vkAcquireNextImageKHR(vk_device, vk_swapchain, UINT64_MAX, vk_acquire_semaphore[vk_frame_id],
+		nullptr, &vk_swapchain_id);
+
+	vk_cmd = vk_cmd_buffer[vk_frame_id];
+
+	vkResetCommandPool(vk_device, vk_cmd_pool[vk_frame_id], 0);
+	VkCommandBufferBeginInfo info = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+	info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	vkBeginCommandBuffer(vk_cmd, &info);
+
+
+	frame_acquired = true;
+}
+
+void vk_next_page()
+{
+	vk_ensure_rendering();
+
+	vkEndCommandBuffer(vk_cmd);
+
+	VkSubmitInfo info_submit = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+	info_submit.waitSemaphoreCount = 1;
+	info_submit.pWaitSemaphores = &vk_acquire_semaphore[vk_frame_id];
+	VkPipelineStageFlags wait_dst = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	info_submit.pWaitDstStageMask = &wait_dst;
+	info_submit.commandBufferCount = 1;
+	info_submit.pCommandBuffers = &vk_cmd;
+	info_submit.signalSemaphoreCount = 1;
+	info_submit.pSignalSemaphores = &vk_finish_semaphore[vk_swapchain_id];
+	vkQueueSubmit(vk_queue, 1, &info_submit, vk_cmd_fence[vk_frame_id]);
+
+	VkPresentInfoKHR info_present = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+	info_present.waitSemaphoreCount = 1;
+	info_present.pWaitSemaphores = &vk_finish_semaphore[vk_swapchain_id];
+	info_present.swapchainCount = 1;
+	info_present.pSwapchains = &vk_swapchain;
+	info_present.pImageIndices = &vk_swapchain_id;
+	vkQueuePresentKHR(vk_queue, &info_present);
+
+	frame_acquired = false;
+	vk_frame_id = (vk_frame_id + 1) % VK_FRAMES_IN_FLIGHT;
 }

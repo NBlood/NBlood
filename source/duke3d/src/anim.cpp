@@ -464,7 +464,7 @@ int32_t Anim_Play(const char *fn)
     P_SetGamePalette(g_player[myconnectindex].ps, ANIMPAL, 8 + 2);
 
 #ifdef USE_OPENGL
-    if (videoGetRenderMode() >= REND_POLYMOST)
+    if (videoGetRenderMode() >= REND_POLYMOST && !usevulkan)
     {
         if (!buildgl_samplerObjectsEnabled())
         {

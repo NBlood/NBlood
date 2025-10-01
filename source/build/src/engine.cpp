@@ -10195,6 +10195,8 @@ static int32_t GetCornerPoints(tspriteptr_t tspr, int32_t (&xx)[4], int32_t (&yy
 //
 void renderDrawMasks(void)
 {
+    if (usevulkan)
+        return;
     MICROPROFILE_SCOPEI("Engine", EDUKE32_FUNCTION, MP_AUTO);
 
     bool const isPolymost = (videoGetRenderMode() == REND_POLYMOST);
@@ -13967,6 +13969,8 @@ void videoClearViewableArea(int32_t dacol)
     if (dacol == -1) dacol = 0;
 
 #ifdef USE_OPENGL
+    if (usevulkan)
+        return;
     if (videoGetRenderMode() >= REND_POLYMOST)
     {
         palette_t const p = paletteGetColor(dacol);
@@ -14005,7 +14009,7 @@ void videoClearScreen(int32_t dacol)
     //dacol += (dacol<<8); dacol += (dacol<<16);
 
 #ifdef USE_OPENGL
-    if (videoGetRenderMode() >= REND_POLYMOST)
+    if (videoGetRenderMode() >= REND_POLYMOST && !usevulkan)
     {
         palette_t const p = paletteGetColor(dacol);
 
