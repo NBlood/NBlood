@@ -688,23 +688,17 @@ void WeaponLower(PLAYER *pPlayer)
             WeaponRaise(pPlayer);
             return;
         case 4:
-            pPlayer->weaponState = 1;
-            StartQAV(pPlayer, 11, -1, 0);
-            if (VanillaMode())
-            {
-                pPlayer->input.newWeapon = kWeaponNone;
-                WeaponLower(pPlayer);
-            }
-            else if (pPlayer->input.newWeapon == kWeaponTNT)
+            if (pPlayer->input.newWeapon == kWeaponTNT && !VanillaMode())
             {
                 pPlayer->weaponState = 2;
                 StartQAV(pPlayer, 11, -1, 0);
                 return;
             }
-            else
-            {
-                WeaponLower(pPlayer);
-            }
+            pPlayer->weaponState = 1;
+            StartQAV(pPlayer, 11, -1, 0);
+            if (VanillaMode())
+                pPlayer->input.newWeapon = kWeaponNone;
+            WeaponLower(pPlayer);
             break;
         case 0:
             if ((pPlayer->input.newWeapon == kWeaponTNT) && !VanillaMode()) // if switched to tnt before lighter is ignited, don't execute spray can equip qav
@@ -2152,15 +2146,12 @@ void WeaponProcess(PLAYER *pPlayer) {
             return;
         break;
     }
-    if (VanillaMode())
+    if (pPlayer->nextWeapon && VanillaMode())
     {
-        if (pPlayer->nextWeapon)
-        {
-            sfxKill3DSound(pPlayer->pSprite, -1, 441);
-            pPlayer->weaponState = 0;
-            pPlayer->input.newWeapon = pPlayer->nextWeapon;
-            pPlayer->nextWeapon = kWeaponNone;
-        }
+        sfxKill3DSound(pPlayer->pSprite, -1, 441);
+        pPlayer->weaponState = 0;
+        pPlayer->input.newWeapon = pPlayer->nextWeapon;
+        pPlayer->nextWeapon = kWeaponNone;
     }
     if ((pPlayer->curWeapon == kWeaponNone) && (pPlayer->input.newWeapon != kWeaponNone) && !VanillaMode()) // if player is switching weapon (and not holstered), clear next/prev keyflags
     {
@@ -2247,14 +2238,11 @@ void WeaponProcess(PLAYER *pPlayer) {
         }
         pPlayer->input.newWeapon = weapon;
     }
-    if (!VanillaMode())
+    if (pPlayer->nextWeapon && !VanillaMode())
     {
-        if (pPlayer->nextWeapon)
-        {
-            sfxKill3DSound(pPlayer->pSprite, -1, 441);
-            pPlayer->input.newWeapon = pPlayer->nextWeapon;
-            pPlayer->nextWeapon = kWeaponNone;
-        }
+        sfxKill3DSound(pPlayer->pSprite, -1, 441);
+        pPlayer->input.newWeapon = pPlayer->nextWeapon;
+        pPlayer->nextWeapon = kWeaponNone;
     }
     if (pPlayer->weaponState == -1)
     {
