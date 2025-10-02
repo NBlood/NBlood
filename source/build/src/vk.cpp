@@ -66,6 +66,8 @@ static uint32_t vk_frame_id;
 static uint32_t vk_swapchain_id;
 static VkDebugUtilsMessengerEXT vk_dbg_messenger;
 static VkFramebuffer* vk_framebuffer;
+static VkRenderPass vk_renderpass;
+static VkExtent2D vk_swapchain_extent;
 
 VkResult vk_initialize_per_frame();
 void vk_destroy_per_frame();
@@ -370,6 +372,7 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	vkGetPhysicalDeviceSurfaceFormatsKHR(vk_physical_device, surface, &surface_formats_count, surface_formats);
 
 	VkFormat format = VK_FORMAT_UNDEFINED;
+	VkFormat depth_format = VK_FORMAT_D24_UNORM_S8_UINT;
 
 	for (uint32_t i = 0; i < surface_formats_count; i++)
 	{
@@ -389,6 +392,8 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 		return VK_ERROR_UNKNOWN;
 	}
 
+	vk_swapchain_extent = { width, height };
+
 	VkSwapchainCreateInfoKHR info = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 
 	uint32_t imageCnt = 3;
@@ -400,8 +405,7 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	info.surface = surface;
 	info.minImageCount = imageCnt;
 	info.imageFormat = format;
-	info.imageExtent.height = height;
-	info.imageExtent.width = width;
+	info.imageExtent = vk_swapchain_extent;
 	info.imageArrayLayers = 1;
 	info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -457,7 +461,7 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	{
 		VkImageCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 		info.imageType = VK_IMAGE_TYPE_2D;
-		info.format = VK_FORMAT_D24_UNORM_S8_UINT;
+		info.format = depth_format;
 		info.extent.height = height;
 		info.extent.width = width;
 		info.extent.depth = 1;
@@ -474,7 +478,7 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 		VkImageViewCreateInfo info_view = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 		info_view.image = vk_depth_image.image;
 		info_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		info_view.format = VK_FORMAT_D24_UNORM_S8_UINT;
+		info_view.format = depth_format;
 		info_view.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 		info_view.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
 		info_view.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -499,10 +503,60 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	}
 
 	{
+		VkAttachmentDescription attachments[2] = {};
+		attachments[0].format = format;
+		attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // VK_ATTACHMENT_LOAD_OP_DONT_CARE
+		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		attachments[1].format = depth_format;
+		attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		VkAttachmentReference color_ref = {};
+		color_ref.attachment = 0;
+		color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		VkAttachmentReference depth_ref = {};
+		depth_ref.attachment = 1;
+		depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		VkSubpassDescription subpass = {};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_ref;
+		subpass.pDepthStencilAttachment = &depth_ref;
+		VkRenderPassCreateInfo info = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+		info.attachmentCount = 2;
+		info.pAttachments = attachments;
+		info.subpassCount = 1;
+		info.pSubpasses = &subpass;
+		VK_CHECKRESULT(vkCreateRenderPass(vk_device, &info, nullptr, &vk_renderpass));
+	}
+
+	{
 		vk_framebuffer = (VkFramebuffer*)Bmalloc(sizeof(VkFramebuffer) * vk_swapchain_image_cnt);
 
 		VkFramebufferCreateInfo info = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-
+		VkImageView attachments[2] = {};
+		attachments[1] = vk_depth_image_view;
+		info.renderPass = vk_renderpass;
+		info.attachmentCount = 2;
+		info.pAttachments = attachments;
+		info.width = width;
+		info.height = height;
+		info.layers = 1;
+		for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
+		{
+			attachments[0] = vk_color_image_view[i];
+			
+			VK_CHECKRESULT(vkCreateFramebuffer(vk_device, &info, nullptr, &vk_framebuffer[i]));
+		}
 	}
 
 	return VK_SUCCESS;
@@ -514,11 +568,22 @@ void vk_destroy_swapchain()
 		return;
 	vkQueueWaitIdle(vk_queue);
 
+	for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
+		vkDestroyFramebuffer(vk_device, vk_framebuffer[i], nullptr);
+	Bfree(vk_framebuffer);
+	vk_framebuffer = nullptr;
+
+	vkDestroyRenderPass(vk_device, vk_renderpass, nullptr);
+	vk_renderpass = nullptr;
+
 	vkDestroyImageView(vk_device, vk_depth_image_view, nullptr);
+	vk_depth_image_view = nullptr;
 	vk_depth_image.destroy();
 
 	for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
 		vkDestroyImageView(vk_device, vk_color_image_view[i], nullptr);
+	Bfree(vk_color_image_view);
+	vk_color_image_view = nullptr;
 
 	vkDestroySwapchainKHR(vk_device, vk_swapchain, nullptr);
 	vk_swapchain = nullptr;
@@ -594,6 +659,24 @@ void vk_ensure_rendering()
 	info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	vkBeginCommandBuffer(vk_cmd, &info);
 
+	static int cnt = 0;
+	cnt++;
+
+	VkClearValue clear_value[2] = {};
+	clear_value[0].color.float32[0] = 1.f;
+	clear_value[0].color.float32[1] = (cnt & 255) / 255.f;
+	clear_value[0].color.float32[2] = 1.f;
+	clear_value[1].depthStencil.depth = 0.0;
+	clear_value[1].depthStencil.stencil = 0;
+
+	VkRenderPassBeginInfo info_rp = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+	info_rp.renderPass = vk_renderpass;
+	info_rp.framebuffer = vk_framebuffer[vk_swapchain_id];
+	info_rp.renderArea.extent = vk_swapchain_extent;
+	info_rp.clearValueCount = 2;
+	info_rp.pClearValues = clear_value;
+
+	vkCmdBeginRenderPass(vk_cmd, &info_rp, VK_SUBPASS_CONTENTS_INLINE);
 
 	frame_acquired = true;
 }
@@ -601,6 +684,8 @@ void vk_ensure_rendering()
 void vk_next_page()
 {
 	vk_ensure_rendering();
+
+	vkCmdEndRenderPass(vk_cmd);
 
 	vkEndCommandBuffer(vk_cmd);
 
