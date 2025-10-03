@@ -14,7 +14,6 @@
 #include "renderlayer.h"
 #include "sdl_inc.h"
 #include "softsurface.h"
-#include "vk.h"
 
 #if SDL_MAJOR_VERSION >= 2
 # include "imgui.h"
@@ -28,6 +27,8 @@
 # include "glad/glad.h"
 # include "glbuild.h"
 # include "glsurface.h"
+# include "vk.h"
+# include "vksurface.h"
 #endif
 
 #if defined HAVE_GTK2
@@ -92,6 +93,7 @@ static int sdl_minimized;
 static SDL_Window *sdl_window;
 static SDL_GLContext sdl_context;
 static int vsync_unsupported;
+static VkSurfaceKHR sdl_vksurface;
 #endif
 
 static int32_t vsync_renderlayer;
@@ -1664,7 +1666,14 @@ int32_t setvideomode_sdlcommon(int32_t *x, int32_t *y, int32_t c, int32_t fs, in
         if (bpp > 8)
             polymost_glreset();
     }
-    if (!nogl)
+    if (usevulkan)
+    {
+        if (bpp == 8)
+            vksurface_destroy();
+
+        vk_destroy_swapchain();
+    }
+    else if (!nogl)
     {
         if (bpp == 8)
             glsurface_destroy();
@@ -1701,7 +1710,16 @@ int setvideomode_sdlcommonpost(int32_t x, int32_t y, int32_t c, int32_t fs, int3
 #ifdef USE_OPENGL
     if (!nogl)
     {
-        if (!usevulkan)
+        if (usevulkan)
+        {
+            VkResult result;
+            if ((result = vk_initialize_swapchain(sdl_vksurface, x, y, vsync_renderlayer)) < 0)
+            {
+                LOG_F(ERROR, "Unable to set video mode: vulkan swapchain creation failed: %d.", result);
+                usevulkan = 0;
+            }
+        }
+        else
             sdlayer_setvideomode_opengl();
     }
 #endif
@@ -1886,18 +1904,11 @@ int32_t videoSetMode(int32_t x, int32_t y, int32_t c, int32_t fs)
                 usevulkan = 0;
             }
             Bfree(ext);
-            VkSurfaceKHR surface;
-            if (usevulkan && !SDL_Vulkan_CreateSurface(sdl_window, vk_instance, &surface))
+            if (usevulkan && !SDL_Vulkan_CreateSurface(sdl_window, vk_instance, &sdl_vksurface))
             {
                 LOG_F(ERROR, "Unable to set video mode: sdl surface creation failed: %s.", SDL_GetError());
                 usevulkan = 0;
             }
-            if (usevulkan && (result = vk_initialize_swapchain(surface, x, y, vsync_renderlayer)) < 0)
-            {
-                LOG_F(ERROR, "Unable to set video mode: vulkan swapchain creation failed: %d.", result);
-                usevulkan = 0;
-            }
-
         }
         if (!usevulkan)
         {
@@ -2061,7 +2072,11 @@ void videoBeginDrawing(void)
     }
     else
 #ifdef USE_OPENGL
-    if (!nogl)
+    if (usevulkan)
+    {
+        frameplace = (intptr_t)vksurface_getBuffer();
+    }
+    else if (!nogl)
     {
         frameplace = (intptr_t)glsurface_getBuffer();
     }
@@ -2120,6 +2135,9 @@ void videoShowFrame(int32_t w)
 #ifdef USE_OPENGL
     if (usevulkan)
     {
+        if (bpp == 8)
+            vksurface_blitBuffer();
+
         vk_next_page();
 
         MicroProfileFlip();
@@ -2276,7 +2294,9 @@ int32_t videoUpdatePalette(int32_t start, int32_t num)
         return 0;  // no palette in opengl
 
 #ifdef USE_OPENGL
-    if (!nogl)
+    if (usevulkan)
+        vksurface_setPalette(curpalettefaded);
+    else if (!nogl)
         glsurface_setPalette(curpalettefaded);
     else
 #endif

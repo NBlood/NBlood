@@ -38,6 +38,7 @@
 #  include "polymer.h"
 # endif
 # include "polymost.h"
+# include "vksurface.h"
 #endif
 
 //////////
@@ -11903,7 +11904,11 @@ static void videoAllocateBuffers(void)
     if (videoGetRenderMode() == REND_CLASSIC)
     {
 # ifdef USE_OPENGL
-        if (!nogl)
+        if (usevulkan)
+        {
+            vksurface_initialize({ xdim, ydim });
+        }
+        else if (!nogl)
         {
             glsurface_initialize({ xdim, ydim });
         }

@@ -9,35 +9,7 @@
 #include "log.h"
 #include "vk.h"
 
-#define VK_CHECKRESULT(x) {VkResult result = (x); if (result < 0) return result; }
-#define VK_FRAMES_IN_FLIGHT 2
-
 static VmaAllocator vk_memmgr;
-
-struct VmaImage
-{
-	VkImage image;
-	VmaAllocation mem;
-
-	VkResult allocate(VkImageCreateInfo* info, VmaAllocationCreateInfo* vma_info = nullptr)
-	{
-		VmaAllocationCreateInfo null_info;
-		if (!vma_info)
-		{
-			null_info = {};
-			null_info.usage = VMA_MEMORY_USAGE_AUTO;
-			vma_info = &null_info;
-		}
-		return vmaCreateImage(vk_memmgr, info, vma_info, &image, &mem, nullptr);;
-	}
-
-	void destroy()
-	{
-		vmaDestroyImage(vk_memmgr, image, mem);
-		image = nullptr;
-		mem = nullptr;
-	}
-};
 
 VkInstance vk_instance;
 static bool volk_init;
@@ -61,13 +33,100 @@ static VkSemaphore* vk_finish_semaphore;
 static VkFence vk_cmd_fence[VK_FRAMES_IN_FLIGHT];
 static VkCommandPool vk_cmd_pool[VK_FRAMES_IN_FLIGHT];
 static VkCommandBuffer vk_cmd_buffer[VK_FRAMES_IN_FLIGHT];
-static VkCommandBuffer vk_cmd;
-static uint32_t vk_frame_id;
+VkCommandBuffer vk_cmd;
+uint32_t vk_frame_id;
 static uint32_t vk_swapchain_id;
 static VkDebugUtilsMessengerEXT vk_dbg_messenger;
 static VkFramebuffer* vk_framebuffer;
 static VkRenderPass vk_renderpass;
 static VkExtent2D vk_swapchain_extent;
+static VkPhysicalDeviceProperties vk_device_props;
+
+
+VkResult VmaImage::allocate(VkImageCreateInfo* info, VmaAllocationCreateInfo* vma_info)
+{
+	VmaAllocationCreateInfo null_info;
+	if (!vma_info)
+	{
+		null_info = {};
+		null_info.usage = VMA_MEMORY_USAGE_AUTO;
+		vma_info = &null_info;
+	}
+	this->info = *info;
+	layout = info->initialLayout;
+	access = (VkAccessFlagBits)0;
+	stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+	return vmaCreateImage(vk_memmgr, info, vma_info, &image, &mem, nullptr);
+}
+
+void VmaImage::destroy()
+{
+	vmaDestroyImage(vk_memmgr, image, mem);
+	image = nullptr;
+	mem = nullptr;
+}
+
+void VmaImage::to_layout(VkCommandBuffer vk_cmd, VkImageLayout dst_layout, VkPipelineStageFlags dst_stage, VkAccessFlagBits dst_access)
+{
+	if (layout == dst_layout && stage == dst_stage && access == dst_access)
+		return;
+	VkImageMemoryBarrier barrier = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+	barrier.srcAccessMask = access;
+	barrier.dstAccessMask = dst_access;
+	barrier.oldLayout = layout;
+	barrier.newLayout = dst_layout;
+	barrier.srcQueueFamilyIndex = vk_queue_family;
+	barrier.dstQueueFamilyIndex = vk_queue_family;
+	barrier.image = image;
+	barrier.subresourceRange.aspectMask = 0;
+	if (info.format == VK_FORMAT_D24_UNORM_S8_UINT)
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+	else
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.baseMipLevel = 0;
+	barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.layerCount = VK_REMAINING_MIP_LEVELS;
+	vkCmdPipelineBarrier(vk_cmd, stage, dst_stage, 0,
+		0, nullptr, 0, nullptr, 1, &barrier);
+
+	layout = dst_layout;
+	stage = dst_stage;
+	access = dst_access;
+}
+
+VkResult VmaBuffer::allocate(VkBufferCreateInfo* info, VmaAllocationCreateInfo* vma_info)
+{
+	VmaAllocationCreateInfo null_info;
+	if (!vma_info)
+	{
+		null_info = {};
+		null_info.usage = VMA_MEMORY_USAGE_AUTO;
+		vma_info = &null_info;
+	}
+	return vmaCreateBuffer(vk_memmgr, info, vma_info, &buffer, &mem, nullptr);
+}
+
+void VmaBuffer::destroy()
+{
+	vmaDestroyBuffer(vk_memmgr, buffer, mem);
+	buffer = nullptr;
+	mem = nullptr;
+}
+
+void* VmaBuffer::map()
+{
+	void* mapped_mem = nullptr;
+	if (mem && vmaMapMemory(vk_memmgr, mem, &mapped_mem) == VK_SUCCESS)
+		return mapped_mem;
+	return nullptr;
+}
+
+void VmaBuffer::unmap()
+{
+	if (mem)
+		vmaUnmapMemory(vk_memmgr, mem);
+}
 
 VkResult vk_initialize_per_frame();
 void vk_destroy_per_frame();
@@ -281,6 +340,8 @@ VkResult vk_initialize_instance(uint32_t required_ext_num, const char** required
 			vk_shutdown_instance();
 			return VK_ERROR_UNKNOWN;
 		}
+
+		vkGetPhysicalDeviceProperties(vk_physical_device, &vk_device_props);
 	}
 
 	{
@@ -393,6 +454,14 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 	}
 
 	vk_swapchain_extent = { width, height };
+	if (vk_swapchain_extent.width < vk_surf_caps.minImageExtent.width)
+		vk_swapchain_extent.width = vk_surf_caps.minImageExtent.width;
+	if (vk_swapchain_extent.width > vk_surf_caps.maxImageExtent.width)
+		vk_swapchain_extent.width = vk_surf_caps.maxImageExtent.width;
+	if (vk_swapchain_extent.height < vk_surf_caps.minImageExtent.height)
+		vk_swapchain_extent.height = vk_surf_caps.minImageExtent.height;
+	if (vk_swapchain_extent.height > vk_surf_caps.maxImageExtent.height)
+		vk_swapchain_extent.height = vk_surf_caps.maxImageExtent.height;
 
 	VkSwapchainCreateInfoKHR info = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 
@@ -462,8 +531,8 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 		VkImageCreateInfo info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 		info.imageType = VK_IMAGE_TYPE_2D;
 		info.format = depth_format;
-		info.extent.height = height;
-		info.extent.width = width;
+		info.extent.height = vk_swapchain_extent.height;
+		info.extent.width = vk_swapchain_extent.width;
 		info.extent.depth = 1;
 		info.mipLevels = 1;
 		info.arrayLayers = 1;
@@ -548,8 +617,8 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 		info.renderPass = vk_renderpass;
 		info.attachmentCount = 2;
 		info.pAttachments = attachments;
-		info.width = width;
-		info.height = height;
+		info.width = vk_swapchain_extent.width;
+		info.height = vk_swapchain_extent.height;
 		info.layers = 1;
 		for (uint32_t i = 0; i < vk_swapchain_image_cnt; i++)
 		{
@@ -659,6 +728,15 @@ void vk_ensure_rendering()
 	info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 	vkBeginCommandBuffer(vk_cmd, &info);
 
+
+	frame_acquired = true;
+}
+
+void vk_next_page()
+{
+	vk_ensure_rendering();
+
+#if 1
 	static int cnt = 0;
 	cnt++;
 
@@ -677,15 +755,8 @@ void vk_ensure_rendering()
 	info_rp.pClearValues = clear_value;
 
 	vkCmdBeginRenderPass(vk_cmd, &info_rp, VK_SUBPASS_CONTENTS_INLINE);
-
-	frame_acquired = true;
-}
-
-void vk_next_page()
-{
-	vk_ensure_rendering();
-
 	vkCmdEndRenderPass(vk_cmd);
+#endif
 
 	vkEndCommandBuffer(vk_cmd);
 
@@ -710,4 +781,10 @@ void vk_next_page()
 
 	frame_acquired = false;
 	vk_frame_id = (vk_frame_id + 1) % VK_FRAMES_IN_FLIGHT;
+}
+
+void vk_wait_idle()
+{
+	if (vkQueueWaitIdle)
+		vkQueueWaitIdle(vk_queue);
 }
