@@ -124,11 +124,16 @@ VIEW predictFifo[256];
 
 int gInterpolate;
 int nInterpolations;
+int nInterpolationsPanning;
 char gInterpolateSprite[bitmap_size(kMaxSprites)];
 char gInterpolateWall[bitmap_size(kMaxWalls)];
 char gInterpolateSector[bitmap_size(kMaxSectors)];
+char gInterpolatePanningWall[bitmap_size(kMaxWalls)];
+char gInterpolatePanningCeiling[bitmap_size(kMaxSectors)];
+char gInterpolatePanningFloor[bitmap_size(kMaxSectors)];
 
-#define kMaxInterpolations 16384
+#define kMaxInterpolationsPanning 1024 // dedicate number of interpolations to texture panning
+#define kMaxInterpolations (16384+kMaxInterpolationsPanning)
 
 INTERPOLATE gInterpolation[kMaxInterpolations];
 
@@ -1000,15 +1005,21 @@ void viewCorrectViewOffsets(int nPlayer, vec3_t const *oldpos)
 void viewClearInterpolations(void)
 {
     nInterpolations = 0;
+    nInterpolationsPanning = 0;
     memset(gInterpolateSprite, 0, sizeof(gInterpolateSprite));
     memset(gInterpolateWall, 0, sizeof(gInterpolateWall));
     memset(gInterpolateSector, 0, sizeof(gInterpolateSector));
+    memset(gInterpolatePanningWall, 0, sizeof(gInterpolatePanningWall));
+    memset(gInterpolatePanningCeiling, 0, sizeof(gInterpolatePanningCeiling));
+    memset(gInterpolatePanningFloor, 0, sizeof(gInterpolatePanningFloor));
 }
 
 void viewAddInterpolation(void *data, INTERPOLATE_TYPE type)
 {
     if (nInterpolations == kMaxInterpolations)
         ThrowError("Too many interpolations");
+    if ((nInterpolationsPanning == kMaxInterpolationsPanning) && (type == INTERPOLATE_TYPE_CHAR_PANNING)) // too many texture panning interpolations, don't add anymore
+        return;
     INTERPOLATE *pInterpolate = &gInterpolation[nInterpolations++];
     pInterpolate->pointer = data;
     pInterpolate->type = type;
@@ -1020,29 +1031,53 @@ void viewAddInterpolation(void *data, INTERPOLATE_TYPE type)
     case INTERPOLATE_TYPE_SHORT:
         pInterpolate->value = *((short*)data);
         break;
+    case INTERPOLATE_TYPE_CHAR_PANNING:
+        nInterpolationsPanning++;
+        fallthrough__;
+    case INTERPOLATE_TYPE_CHAR:
+        pInterpolate->value = *((char*)data);
+        break;
     }
 }
 
 void CalcInterpolations(void)
 {
-    int i;
+    int i, value;
     INTERPOLATE *pInterpolate = gInterpolation;
     for (i = 0; i < nInterpolations; i++, pInterpolate++)
     {
+        value = pInterpolate->value;
         switch (pInterpolate->type)
         {
         case INTERPOLATE_TYPE_INT:
         {
-            pInterpolate->value2 = *((int*)pInterpolate->pointer);
-            int newValue = interpolate(pInterpolate->value, *((int*)pInterpolate->pointer), gInterpolate);
-            *((int*)pInterpolate->pointer) = newValue;
+            const int value2 = *((int*)pInterpolate->pointer);
+            pInterpolate->value2 = value2;
+            if (value2 != value)
+                *((int*)pInterpolate->pointer) = (int)interpolate(value, value2, gInterpolate);
             break;
         }
         case INTERPOLATE_TYPE_SHORT:
         {
-            pInterpolate->value2 = *((short*)pInterpolate->pointer);
-            int newValue = interpolate(pInterpolate->value, *((short*)pInterpolate->pointer), gInterpolate);
-            *((short*)pInterpolate->pointer) = newValue;
+            const int value2 = *((short*)pInterpolate->pointer);
+            pInterpolate->value2 = value2;
+            if (value2 != value)
+                *((short*)pInterpolate->pointer) = (short)interpolate(value, value2, gInterpolate);
+            break;
+        }
+        case INTERPOLATE_TYPE_CHAR_PANNING:
+        case INTERPOLATE_TYPE_CHAR:
+        {
+            const int value2 = *((char*)pInterpolate->pointer);
+            pInterpolate->value2 = value2;
+            const int nDiff = value - value2;
+            if (nDiff == 0)
+                break;
+            if (nDiff > 127) // handle overflow gracefully
+                value -= 256;
+            else if (nDiff < -128)
+                value += 256;
+            *((char*)pInterpolate->pointer) = (char)interpolate(value, value2, gInterpolate);
             break;
         }
         }
@@ -1062,6 +1097,10 @@ void RestoreInterpolations(void)
             break;
         case INTERPOLATE_TYPE_SHORT:
             *((short*)pInterpolate->pointer) = pInterpolate->value2;
+            break;
+        case INTERPOLATE_TYPE_CHAR_PANNING:
+        case INTERPOLATE_TYPE_CHAR:
+            *((char*)pInterpolate->pointer) = pInterpolate->value2;
             break;
         }
     }
@@ -3799,6 +3838,7 @@ RORHACKOTHER:
         }
         q16horiz = ClipRange(q16horiz, F16(-200), F16(200));
         int nRORLimit = 32; // limit ROR rendering to 32 times
+        ClearGotSectorSectorFX();
 RORHACK:
         int ror_status[16];
         for (int i = 0; i < 16; i++)
@@ -3820,6 +3860,7 @@ RORHACK:
 #endif
         yax_preparedrawrooms();
         renderDrawRoomsQ16(cX, cY, cZ, cA, q16horiz + fix16_from_int(defaultHoriz) + deliriumPitchI, nSectnum);
+        UpdateGotSectorSectorFX();
         yax_drawrooms(viewProcessSprites, nSectnum, 0, gInterpolate);
         viewProcessSprites(cX, cY, cZ, fix16_to_int(cA), gInterpolate);
         for (int i = 0; nRORLimit && (i < 16); i++) // check if ror needs to be rendered
@@ -4020,7 +4061,9 @@ RORHACK:
                 nAng = fix16_to_int(cA);
             }
         }
+        ClearGotSectorSectorFX();
         gViewMap.Process(cX, cY, nAng);
+        UpdateGotSectorSectorFX();
     }
     viewDrawInterface(delta);
     if (IsPlayerSprite(gView->pSprite) && (gView->hand == 1))

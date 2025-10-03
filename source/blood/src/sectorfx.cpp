@@ -31,6 +31,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "globals.h"
 #include "trig.h"
 #include "sectorfx.h"
+#include "view.h"
 
 char flicker1[] = {
     0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 0,
@@ -110,6 +111,7 @@ int shadeCount = 0;
 short shadeList[kMaxXSectors];
 int panCount = 0;
 short panList[kMaxXSectors];
+char gotsectorROR[bitmap_size(kMaxSectors)]; // this is the same as gotsector, except it includes any ROR drawn sectors
 
 void DoSectorLighting(void)
 {
@@ -256,10 +258,13 @@ void UndoSectorLighting(void)
 }
 
 short wallPanList[kMaxXWalls];
+short wallPanListSect[kMaxXWalls];
+short wallPanListNextSect[kMaxXWalls];
 int wallPanCount;
 
 void DoSectorPanning(void)
 {
+    const char bInterp = (gViewMode == 3) && !VanillaMode();
     for (int i = 0; i < panCount; i++)
     {
         int nXSector = panList[i];
@@ -286,6 +291,8 @@ void DoSectorPanning(void)
                 px += mulscale30(speed<<2, Cos(angle))>>xBits;
                 int yBits = (picsiz[nTile]/16)-((pSector->floorstat&8)!=0);
                 py -= mulscale30(speed<<2, Sin(angle))>>yBits;
+                if (bInterp && TestBitString(gotsectorROR, nSector))
+                    viewInterpolatePanningFloor(nSector, pSector);
                 pSector->floorxpanning = px>>8;
                 pSector->floorypanning = py>>8;
                 pXSector->floorXPanFrac = px&255;
@@ -302,6 +309,8 @@ void DoSectorPanning(void)
                 px += mulscale30(speed<<2, Cos(-angle))>>xBits;
                 int yBits = (picsiz[nTile]/16)-((pSector->ceilingstat&8)!=0);
                 py -= mulscale30(speed<<2, Sin(-angle))>>yBits;
+                if (bInterp && TestBitString(gotsectorROR, nSector))
+                    viewInterpolatePanningCeiling(nSector, pSector);
                 pSector->ceilingxpanning = px>>8;
                 pSector->ceilingypanning = py>>8;
                 pXSector->ceilXPanFrac = px&255;
@@ -329,6 +338,8 @@ void DoSectorPanning(void)
             int py = (wall[nWall].ypanning<<8)+pXWall->ypanFrac;
             px += (psx<<2)>>((uint8_t)picsiz[nTile]&15);
             py += (psy<<2)>>((uint8_t)picsiz[nTile]/16);
+            if (bInterp && (TestBitString(gotsectorROR, wallPanListSect[i]) || (wallPanListNextSect[i] >= 0 && TestBitString(gotsectorROR, wallPanListNextSect[i]))))
+                viewInterpolatePanningWall(nWall, &wall[nWall]);
             wall[nWall].xpanning = px>>8;
             wall[nWall].ypanning = py>>8;
             pXWall->xpanFrac = px&255;
@@ -342,6 +353,7 @@ void InitSectorFX(void)
     shadeCount = 0;
     panCount = 0;
     wallPanCount = 0;
+    ClearGotSectorSectorFX();
     for (int i = 0; i < numsectors; i++)
     {
         int nXSector = sector[i].extra;
@@ -361,8 +373,46 @@ void InitSectorFX(void)
         {
             XWALL *pXWall = &xwall[nXWall];
             if (pXWall->panXVel || pXWall->panYVel)
+            {
+                for (int j = 0; j < numsectors; j++) // lookup sector for wall
+                {
+                    short startwall = sector[j].wallptr;
+                    const short endwall = startwall + sector[j].wallnum;
+                    if ((i >= startwall) && (i < endwall))
+                    {
+                        wallPanListSect[wallPanCount] = j;
+                        break;
+                    }
+                }
+                wallPanListNextSect[wallPanCount] = wall[i].nextsector;
                 wallPanList[wallPanCount++] = nXWall;
+            }
         }
+    }
+}
+
+static char bGotsectorCleared = 0;
+
+void ClearGotSectorSectorFX(void)
+{
+    Bmemset(gotsectorROR, 0, sizeof(gotsectorROR));
+    bGotsectorCleared = 1;
+}
+
+void UpdateGotSectorSectorFX(void)
+{
+    if (bGotsectorCleared) // fresh start, don't bother doing compare
+    {
+        Bmemcpy(gotsectorROR, gotsector, bitmap_size(numsectors));
+        bGotsectorCleared = 0;
+        return;
+    }
+    for (int i = 0; i < bitmap_size(numsectors); i += 4)
+    {
+        gotsectorROR[i]   |= gotsector[i];
+        gotsectorROR[i+1] |= gotsector[i+1];
+        gotsectorROR[i+2] |= gotsector[i+2];
+        gotsectorROR[i+3] |= gotsector[i+3];
     }
 }
 

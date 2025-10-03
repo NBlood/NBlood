@@ -27,8 +27,11 @@ extern int shadeCount;
 extern short shadeList[kMaxXSectors];
 extern int panCount;
 extern short panList[kMaxXSectors];
+extern char gotsectorROR[bitmap_size(kMaxSectors)];
 
 void DoSectorLighting(void);
 void UndoSectorLighting(void);
 void DoSectorPanning(void);
 void InitSectorFX(void);
+void ClearGotSectorSectorFX(void);
+void UpdateGotSectorSectorFX(void);
