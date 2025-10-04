@@ -33,5 +33,5 @@ void DoSectorLighting(void);
 void UndoSectorLighting(void);
 void DoSectorPanning(void);
 void InitSectorFX(void);
-void ClearGotSectorSectorFX(void);
+void ClearGotSectorSectorFX(const bool bClearAll = false);
 void UpdateGotSectorSectorFX(void);

@@ -354,7 +354,7 @@ void InitSectorFX(void)
     shadeCount = 0;
     panCount = 0;
     wallPanCount = 0;
-    ClearGotSectorSectorFX();
+    ClearGotSectorSectorFX(true);
     for (int i = 0; i < numsectors; i++)
     {
         int nXSector = sector[i].extra;
@@ -394,9 +394,9 @@ void InitSectorFX(void)
 
 static char bGotsectorCleared = 0;
 
-void ClearGotSectorSectorFX(void)
+void ClearGotSectorSectorFX(const bool bClearAll)
 {
-    Bmemset(gotsectorROR, 0, sizeof(gotsectorROR));
+    Bmemset(gotsectorROR, 0, bClearAll ? sizeof(gotsectorROR) : bitmap_size(numsectors));
     bGotsectorCleared = 1;
 }
 
