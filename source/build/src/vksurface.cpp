@@ -15,20 +15,20 @@ static int buffer_size;
 static void* buffer;
 static vec2_t buffer_res;
 static uint8_t cur_palette[1024];
-static VmaImage frame_texture[VK_FRAMES_IN_FLIGHT];
-static VmaImage palette_texture[VK_FRAMES_IN_FLIGHT];
-static VmaBuffer staging_buffer[VK_FRAMES_IN_FLIGHT];
-static void* staging_buffer_map[VK_FRAMES_IN_FLIGHT];
+static VmaImage frame_texture;
+static VmaImage palette_texture;
+static VmaBuffer staging_buffer;
+static void* staging_buffer_map;
 static uint64_t staging_buffer_size;
-static uint64_t staging_frame_offset;
-static uint64_t staging_pal_offset;
+static uint64_t staging_frame_offset[VK_FRAMES_IN_FLIGHT];
+static uint64_t staging_pal_offset[VK_FRAMES_IN_FLIGHT];
 
 static VkShaderModule shader_vertex;
 static VkShaderModule shader_fragment;
 static VkDescriptorSetLayout set_layout;
 static VkPipelineLayout pipeline_layout;
 static VkPipeline pipeline;
-static VkDescriptorSet descriptor_set[VK_FRAMES_IN_FLIGHT];
+static VkDescriptorSet descriptor_set;
 static VkDescriptorPool descriptor_pool;
 static VkSampler sampler;
 
@@ -64,9 +64,12 @@ VkResult vksurface_initialize_vulkan()
 
     uint64_t offset = 0;
     
-    staging_frame_offset = 0;
-    staging_pal_offset = staging_frame_offset + buffer_size;
-    staging_buffer_size = staging_pal_offset + 1024;
+    for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
+    {
+        staging_frame_offset[i] = offset; offset += buffer_size;
+        staging_pal_offset[i] = offset; offset += 1024;
+    }
+    staging_buffer_size = offset;
 
     VkBufferCreateInfo info_buffer = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
     info_buffer.size = staging_buffer_size;
@@ -75,14 +78,11 @@ VkResult vksurface_initialize_vulkan()
     info_vmabuffer.usage = VMA_MEMORY_USAGE_AUTO;
     info_vmabuffer.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
-    {
-        VK_CHECKRESULT(frame_texture[i].allocate(&info_frame));
-        VK_CHECKRESULT(palette_texture[i].allocate(&info_palette));
-        VK_CHECKRESULT(staging_buffer[i].allocate(&info_buffer, &info_vmabuffer));
+    VK_CHECKRESULT(frame_texture.allocate(&info_frame));
+    VK_CHECKRESULT(palette_texture.allocate(&info_palette));
+    VK_CHECKRESULT(staging_buffer.allocate(&info_buffer, &info_vmabuffer));
 
-        staging_buffer_map[i] = staging_buffer[i].map();
-    }
+    staging_buffer_map = staging_buffer.map();
 
     VkShaderModuleCreateInfo info_vert = { VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO };
     info_vert.codeSize = sizeof(vertex_spirv);
@@ -173,25 +173,20 @@ VkResult vksurface_initialize_vulkan()
 
     VkDescriptorPoolSize pool_size = {};
     pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    pool_size.descriptorCount = 2 * VK_FRAMES_IN_FLIGHT;
+    pool_size.descriptorCount = 2;
     VkDescriptorPoolCreateInfo info_decriptor_pool = { VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
-    info_decriptor_pool.maxSets = VK_FRAMES_IN_FLIGHT;
+    info_decriptor_pool.maxSets = 1;
     info_decriptor_pool.poolSizeCount = 1;
     info_decriptor_pool.pPoolSizes = &pool_size;
 
     VK_CHECKRESULT(vkCreateDescriptorPool(vk_device, &info_decriptor_pool, nullptr, &descriptor_pool));
 
-    VkDescriptorSetLayout layouts[VK_FRAMES_IN_FLIGHT] = {};
-    for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
-    {
-        layouts[i] = set_layout;
-    }
     VkDescriptorSetAllocateInfo info_alloc = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
     info_alloc.descriptorPool = descriptor_pool;
-    info_alloc.descriptorSetCount = 2;
-    info_alloc.pSetLayouts = layouts;
+    info_alloc.descriptorSetCount = 1;
+    info_alloc.pSetLayouts = &set_layout;
 
-    VK_CHECKRESULT(vkAllocateDescriptorSets(vk_device, &info_alloc, descriptor_set));
+    VK_CHECKRESULT(vkAllocateDescriptorSets(vk_device, &info_alloc, &descriptor_set));
 
     VkSamplerCreateInfo info_sampler = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
     info_sampler.magFilter = VK_FILTER_NEAREST;
@@ -201,30 +196,27 @@ VkResult vksurface_initialize_vulkan()
     info_sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     VK_CHECKRESULT(vkCreateSampler(vk_device, &info_sampler, nullptr, &sampler));
 
-    VkWriteDescriptorSet descriptor_write[VK_FRAMES_IN_FLIGHT * 2] = {};
-    VkDescriptorImageInfo descriptor_image[VK_FRAMES_IN_FLIGHT * 2] = {};
-    for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
-    {
-        descriptor_write[i * 2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write[i * 2].dstSet = descriptor_set[i];
-        descriptor_write[i * 2].dstBinding = 0;
-        descriptor_write[i * 2].descriptorCount = 1;
-        descriptor_write[i * 2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptor_write[i * 2].pImageInfo = &descriptor_image[i * 2];
-        descriptor_image[i * 2].sampler = sampler;
-        descriptor_image[i * 2].imageView = frame_texture[i].image_view;
-        descriptor_image[i * 2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        descriptor_write[i * 2 + 1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_write[i * 2 + 1].dstSet = descriptor_set[i];
-        descriptor_write[i * 2 + 1].dstBinding = 1;
-        descriptor_write[i * 2 + 1].descriptorCount = 1;
-        descriptor_write[i * 2 + 1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptor_write[i * 2 + 1].pImageInfo = &descriptor_image[i * 2 + 1];
-        descriptor_image[i * 2 + 1].sampler = sampler;
-        descriptor_image[i * 2 + 1].imageView = palette_texture[i].image_view;
-        descriptor_image[i * 2 + 1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    }
-    vkUpdateDescriptorSets(vk_device, VK_FRAMES_IN_FLIGHT * 2, descriptor_write, 0, NULL);
+    VkWriteDescriptorSet descriptor_write[2] = {};
+    VkDescriptorImageInfo descriptor_image[2] = {};
+    descriptor_write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptor_write[0].dstSet = descriptor_set;
+    descriptor_write[0].dstBinding = 0;
+    descriptor_write[0].descriptorCount = 1;
+    descriptor_write[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptor_write[0].pImageInfo = &descriptor_image[0];
+    descriptor_image[0].sampler = sampler;
+    descriptor_image[0].imageView = frame_texture.image_view;
+    descriptor_image[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    descriptor_write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptor_write[1].dstSet = descriptor_set;
+    descriptor_write[1].dstBinding = 1;
+    descriptor_write[1].descriptorCount = 1;
+    descriptor_write[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptor_write[1].pImageInfo = &descriptor_image[1];
+    descriptor_image[1].sampler = sampler;
+    descriptor_image[1].imageView = palette_texture.image_view;
+    descriptor_image[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    vkUpdateDescriptorSets(vk_device, 2, descriptor_write, 0, NULL);
 
     return VK_SUCCESS;
 }
@@ -261,13 +253,18 @@ void vksurface_destroy()
 
     vk_wait_idle();
 
-    for (uint32_t i = 0; i < VK_FRAMES_IN_FLIGHT; i++)
-    {
-        frame_texture[i].destroy();
-        palette_texture[i].destroy();
-        staging_buffer[i].unmap();
-        staging_buffer[i].destroy();
-    }
+    frame_texture.destroy();
+    palette_texture.destroy();
+    staging_buffer.unmap();
+    staging_buffer.destroy();
+
+    vkDestroySampler(vk_device, sampler, nullptr);
+    vkDestroyDescriptorPool(vk_device, descriptor_pool, nullptr);
+    vkDestroyPipeline(vk_device, pipeline, nullptr);
+    vkDestroyPipelineLayout(vk_device, pipeline_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_device, set_layout, nullptr);
+    vkDestroyShaderModule(vk_device, shader_vertex, nullptr);
+    vkDestroyShaderModule(vk_device, shader_fragment, nullptr);
 }
 
 void* vksurface_getBuffer()
@@ -290,12 +287,12 @@ void vksurface_blitBuffer()
 
     vk_acquire_frame();
 
-    uint8_t* dest = (uint8_t*)staging_buffer_map[vk_frame_id];
-    Bmemcpy(dest + staging_frame_offset, buffer, buffer_size);
-    Bmemcpy(dest + staging_pal_offset, cur_palette, 1024);
+    uint8_t* dest = (uint8_t*)staging_buffer_map;
+    Bmemcpy(dest + staging_frame_offset[vk_frame_id], buffer, buffer_size);
+    Bmemcpy(dest + staging_pal_offset[vk_frame_id], cur_palette, 1024);
 
     VkBufferImageCopy frame_copy = {};
-    frame_copy.bufferOffset = staging_frame_offset;
+    frame_copy.bufferOffset = staging_frame_offset[vk_frame_id];
     frame_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     frame_copy.imageSubresource.mipLevel = 0;
     frame_copy.imageSubresource.baseArrayLayer = 0;
@@ -304,7 +301,7 @@ void vksurface_blitBuffer()
     frame_copy.imageExtent.height = buffer_res.y;
     frame_copy.imageExtent.depth = 1;
     VkBufferImageCopy pal_copy = {};
-    pal_copy.bufferOffset = staging_pal_offset;
+    pal_copy.bufferOffset = staging_pal_offset[vk_frame_id];
     pal_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     pal_copy.imageSubresource.mipLevel = 0;
     pal_copy.imageSubresource.baseArrayLayer = 0;
@@ -313,26 +310,26 @@ void vksurface_blitBuffer()
     pal_copy.imageExtent.height = 1;
     pal_copy.imageExtent.depth = 1;
 
-    frame_texture[vk_frame_id].to_layout(vk_cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    frame_texture.to_layout(vk_cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_ACCESS_TRANSFER_WRITE_BIT);
-    palette_texture[vk_frame_id].to_layout(vk_cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+    palette_texture.to_layout(vk_cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_ACCESS_TRANSFER_WRITE_BIT);
 
-    vkCmdCopyBufferToImage(vk_cmd, staging_buffer[vk_frame_id].buffer,
-        frame_texture[vk_frame_id].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    vkCmdCopyBufferToImage(vk_cmd, staging_buffer.buffer,
+        frame_texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &frame_copy);
-    vkCmdCopyBufferToImage(vk_cmd, staging_buffer[vk_frame_id].buffer,
-        palette_texture[vk_frame_id].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    vkCmdCopyBufferToImage(vk_cmd, staging_buffer.buffer,
+        palette_texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &pal_copy);
 
-    frame_texture[vk_frame_id].to_layout(vk_cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    frame_texture.to_layout(vk_cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         VK_ACCESS_SHADER_READ_BIT);
-    palette_texture[vk_frame_id].to_layout(vk_cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+    palette_texture.to_layout(vk_cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         VK_ACCESS_SHADER_READ_BIT);
 
     vkCmdBindPipeline(vk_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     vkCmdBindDescriptorSets(vk_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline_layout, 0, 1, &descriptor_set[vk_frame_id], 0, nullptr);
+        pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
     vk_begin_renderpass();
 

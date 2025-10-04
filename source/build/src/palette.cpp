@@ -125,10 +125,12 @@ void fullscreen_tint_gl_blood(void)
 void videoFadeToBlack(int32_t moreopaquep)
 {
 #ifdef USE_OPENGL
-    if (usevulkan)
-        return;
     if (videoGetRenderMode() >= REND_POLYMOST)
+    {
+        if (usevulkan)
+            return;
         fullscreen_tint_gl(0, 0, 0, moreopaquep ? 168 : 84);
+    }
     else
 #endif
     {
