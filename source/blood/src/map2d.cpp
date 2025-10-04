@@ -216,7 +216,7 @@ void CViewMap::Draw(void)
 
 void CViewMap::Process(int nX, int nY, short nAng)
 {
-    nZoom = gZoom*((ydim/200)>>1); // scale to display resolution
+    nZoom = scale(gZoom, ydim, 200) >> 1; // scale to display resolution
     if (bFollowMode)
     {
         x = nX;
