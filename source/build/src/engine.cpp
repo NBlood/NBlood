@@ -10196,7 +10196,7 @@ static int32_t GetCornerPoints(tspriteptr_t tspr, int32_t (&xx)[4], int32_t (&yy
 //
 void renderDrawMasks(void)
 {
-    if (usevulkan)
+    if (videoGetRenderMode() >= REND_POLYMOST && usevulkan)
         return;
     MICROPROFILE_SCOPEI("Engine", EDUKE32_FUNCTION, MP_AUTO);
 
@@ -13974,10 +13974,10 @@ void videoClearViewableArea(int32_t dacol)
     if (dacol == -1) dacol = 0;
 
 #ifdef USE_OPENGL
-    if (usevulkan)
-        return;
     if (videoGetRenderMode() >= REND_POLYMOST)
     {
+        if (usevulkan)
+            return;
         palette_t const p = paletteGetColor(dacol);
 
         glClearColor((float)p.r * (1.f/255.f),
@@ -14014,8 +14014,10 @@ void videoClearScreen(int32_t dacol)
     //dacol += (dacol<<8); dacol += (dacol<<16);
 
 #ifdef USE_OPENGL
-    if (videoGetRenderMode() >= REND_POLYMOST && !usevulkan)
+    if (videoGetRenderMode() >= REND_POLYMOST)
     {
+        if (usevulkan)
+            return;
         palette_t const p = paletteGetColor(dacol);
 
         glViewport(0,0,xdim,ydim);

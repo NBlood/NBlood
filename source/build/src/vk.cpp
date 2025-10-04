@@ -16,7 +16,7 @@ static bool volk_init;
 static bool vk_validation = true;
 static VkPhysicalDevice vk_physical_device;
 static uint32_t vk_queue_family;
-static VkDevice vk_device;
+VkDevice vk_device;
 static VkQueue vk_queue;
 static VkSurfaceKHR vk_surface;
 static VkSurfaceCapabilitiesKHR vk_surf_caps;
@@ -38,9 +38,24 @@ uint32_t vk_frame_id;
 static uint32_t vk_swapchain_id;
 static VkDebugUtilsMessengerEXT vk_dbg_messenger;
 static VkFramebuffer* vk_framebuffer;
-static VkRenderPass vk_renderpass;
+VkRenderPass vk_renderpass;
 static VkExtent2D vk_swapchain_extent;
 static VkPhysicalDeviceProperties vk_device_props;
+
+VkImageAspectFlags vk_format_to_aspect(VkFormat format)
+{
+	switch (format)
+	{
+		case VK_FORMAT_R8_UINT:
+		case VK_FORMAT_R8G8B8A8_UNORM:
+		case VK_FORMAT_R8G8B8A8_SNORM:
+		case VK_FORMAT_R8G8B8A8_SRGB:
+			return VK_IMAGE_ASPECT_COLOR_BIT;
+		case VK_FORMAT_D24_UNORM_S8_UINT:
+			return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+	}
+	return 0;
+}
 
 
 VkResult VmaImage::allocate(VkImageCreateInfo* info, VmaAllocationCreateInfo* vma_info)
@@ -56,7 +71,19 @@ VkResult VmaImage::allocate(VkImageCreateInfo* info, VmaAllocationCreateInfo* vm
 	layout = info->initialLayout;
 	access = (VkAccessFlagBits)0;
 	stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-	return vmaCreateImage(vk_memmgr, info, vma_info, &image, &mem, nullptr);
+	VK_CHECKRESULT(vmaCreateImage(vk_memmgr, info, vma_info, &image, &mem, nullptr));
+
+	VkImageViewCreateInfo info_view = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+	info_view.image = image;
+	info_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	info_view.format = info->format;
+	info_view.subresourceRange.aspectMask = vk_format_to_aspect(info->format);
+	info_view.subresourceRange.levelCount = 1;
+	info_view.subresourceRange.layerCount = 1;
+
+	VK_CHECKRESULT(vkCreateImageView(vk_device, &info_view, nullptr, &image_view));
+
+	return VK_SUCCESS;
 }
 
 void VmaImage::destroy()
@@ -78,11 +105,7 @@ void VmaImage::to_layout(VkCommandBuffer vk_cmd, VkImageLayout dst_layout, VkPip
 	barrier.srcQueueFamilyIndex = vk_queue_family;
 	barrier.dstQueueFamilyIndex = vk_queue_family;
 	barrier.image = image;
-	barrier.subresourceRange.aspectMask = 0;
-	if (info.format == VK_FORMAT_D24_UNORM_S8_UINT)
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-	else
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.aspectMask = vk_format_to_aspect(info.format);
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
 	barrier.subresourceRange.baseArrayLayer = 0;
@@ -575,7 +598,7 @@ VkResult vk_initialize_swapchain(VkSurfaceKHR surface, uint32_t width, uint32_t 
 		VkAttachmentDescription attachments[2] = {};
 		attachments[0].format = format;
 		attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // VK_ATTACHMENT_LOAD_OP_DONT_CARE
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -710,7 +733,7 @@ void vk_destroy_per_frame()
 	}
 }
 
-void vk_ensure_rendering()
+void vk_acquire_frame()
 {
 	if (frame_acquired)
 		return;
@@ -732,20 +755,9 @@ void vk_ensure_rendering()
 	frame_acquired = true;
 }
 
-void vk_next_page()
+void vk_begin_renderpass()
 {
-	vk_ensure_rendering();
-
-#if 1
-	static int cnt = 0;
-	cnt++;
-
 	VkClearValue clear_value[2] = {};
-	clear_value[0].color.float32[0] = 1.f;
-	clear_value[0].color.float32[1] = (cnt & 255) / 255.f;
-	clear_value[0].color.float32[2] = 1.f;
-	clear_value[1].depthStencil.depth = 0.0;
-	clear_value[1].depthStencil.stencil = 0;
 
 	VkRenderPassBeginInfo info_rp = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
 	info_rp.renderPass = vk_renderpass;
@@ -755,8 +767,16 @@ void vk_next_page()
 	info_rp.pClearValues = clear_value;
 
 	vkCmdBeginRenderPass(vk_cmd, &info_rp, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void vk_end_renderpass()
+{
 	vkCmdEndRenderPass(vk_cmd);
-#endif
+}
+
+void vk_next_page()
+{
+	vk_acquire_frame();
 
 	vkEndCommandBuffer(vk_cmd);
 
