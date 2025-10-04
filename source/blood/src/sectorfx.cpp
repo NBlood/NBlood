@@ -265,6 +265,7 @@ int wallPanCount;
 void DoSectorPanning(void)
 {
     const char bInterp = (gViewMode == 3) && !VanillaMode();
+    const char bInterpFloor = ((gViewMode == 3) || (gViewMode == 4)) && !VanillaMode(); // map view sees floor sectors, allow them to be interpolated
     for (int i = 0; i < panCount; i++)
     {
         int nXSector = panList[i];
@@ -291,7 +292,7 @@ void DoSectorPanning(void)
                 px += mulscale30(speed<<2, Cos(angle))>>xBits;
                 int yBits = (picsiz[nTile]/16)-((pSector->floorstat&8)!=0);
                 py -= mulscale30(speed<<2, Sin(angle))>>yBits;
-                if (bInterp && TestBitString(gotsectorROR, nSector))
+                if (bInterpFloor && TestBitString(gotsectorROR, nSector))
                     viewInterpolatePanningFloor(nSector, pSector);
                 pSector->floorxpanning = px>>8;
                 pSector->floorypanning = py>>8;
