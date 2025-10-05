@@ -87,6 +87,10 @@ void _consoleSysMsg(const char* pMessage, ...);
 #define TILTBUFFER 4078
 #define CRYSTALBALLBUFFER 4079
 
+#define kAxisHeatmapTile (MAXTILES-2)
+#define kSMKPal 5
+#define kSMKTile (MAXTILES-1)
+
 #define kExplodeMax 8
 
 #define kLensSize 80
