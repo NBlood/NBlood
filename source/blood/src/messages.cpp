@@ -587,7 +587,6 @@ void CPlayerMsg::Send(void)
     }
 
     Term();
-    keyFlushScans();
 }
 
 void CPlayerMsg::ProcessKeys(void)
@@ -631,6 +630,8 @@ void CPlayerMsg::ProcessKeys(void)
                 Term();
             else
                 Send();
+            keyFlushScans();
+            KB_ClearKeysDown();
             break;
         default:
             if (key < 128)
