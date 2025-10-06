@@ -62,6 +62,8 @@ enum VIEWPOS {
 enum INTERPOLATE_TYPE {
     INTERPOLATE_TYPE_INT = 0,
     INTERPOLATE_TYPE_SHORT,
+    INTERPOLATE_TYPE_CHAR,
+    INTERPOLATE_TYPE_CHAR_PANNING, // this is only for wall/ceiling/floor texture panning
 };
 
 #define CROSSHAIR_PAL (MAXPALOOKUPS-RESERVEDPALS-1)
@@ -102,6 +104,9 @@ extern int gInterpolate;
 extern char gInterpolateSprite[];
 extern char gInterpolateWall[];
 extern char gInterpolateSector[];
+extern char gInterpolatePanningWall[];
+extern char gInterpolatePanningCeiling[];
+extern char gInterpolatePanningFloor[];
 extern LOCATION gPrevSpriteLoc[kMaxSprites];
 extern int gViewSize;
 extern CGameMessageMgr gGameMessageMgr;
@@ -222,6 +227,36 @@ inline void viewInterpolateWall(int nWall, walltype *pWall)
         viewAddInterpolation(&pWall->x, INTERPOLATE_TYPE_INT);
         viewAddInterpolation(&pWall->y, INTERPOLATE_TYPE_INT);
         SetBitString(gInterpolateWall, nWall);
+    }
+}
+
+inline void viewInterpolatePanningWall(int nWall, walltype *pWall)
+{
+    if (gViewInterpolate && !TestBitString(gInterpolatePanningWall, nWall))
+    {
+        viewAddInterpolation(&pWall->xpanning, INTERPOLATE_TYPE_CHAR_PANNING);
+        viewAddInterpolation(&pWall->ypanning, INTERPOLATE_TYPE_CHAR_PANNING);
+        SetBitString(gInterpolatePanningWall, nWall);
+    }
+}
+
+inline void viewInterpolatePanningCeiling(int nSector, sectortype *pSector)
+{
+    if (gViewInterpolate && !TestBitString(gInterpolatePanningCeiling, nSector))
+    {
+        viewAddInterpolation(&pSector->ceilingxpanning, INTERPOLATE_TYPE_CHAR_PANNING);
+        viewAddInterpolation(&pSector->ceilingypanning, INTERPOLATE_TYPE_CHAR_PANNING);
+        SetBitString(gInterpolatePanningCeiling, nSector);
+    }
+}
+
+inline void viewInterpolatePanningFloor(int nSector, sectortype *pSector)
+{
+    if (gViewInterpolate && !TestBitString(gInterpolatePanningFloor, nSector))
+    {
+        viewAddInterpolation(&pSector->floorxpanning, INTERPOLATE_TYPE_CHAR_PANNING);
+        viewAddInterpolation(&pSector->floorypanning, INTERPOLATE_TYPE_CHAR_PANNING);
+        SetBitString(gInterpolatePanningFloor, nSector);
     }
 }
 
