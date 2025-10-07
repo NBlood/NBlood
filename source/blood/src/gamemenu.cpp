@@ -279,6 +279,12 @@ void CGameMenuMgr::Process(void)
         case sc_BackSpace:
             event.at0 = kMenuEventBackSpace;
             break;
+        case sc_PgUp:
+            event.at0 = kMenuEventTop;
+            break;
+        case sc_PgDn:
+            event.at0 = kMenuEventBottom;
+            break;
         default:
             event.at0 = kMenuEventKey;
             break;
@@ -291,18 +297,35 @@ void CGameMenuMgr::Process(void)
         JOYSTICK_ClearAllButtons();
         if (joy != joyold)
         {
-            if (joy & (1 << CONTROLLER_BUTTON_DPAD_UP))
+            switch (joy)
+            {
+            case 1 << CONTROLLER_BUTTON_DPAD_UP:
                 event.at0 = kMenuEventUp;
-            else if (joy & (1 << CONTROLLER_BUTTON_DPAD_DOWN))
+                break;
+            case 1 << CONTROLLER_BUTTON_DPAD_DOWN:
                 event.at0 = kMenuEventDown;
-            else if (joy & (1 << CONTROLLER_BUTTON_DPAD_LEFT))
+                break;
+            case 1 << CONTROLLER_BUTTON_DPAD_LEFT:
                 event.at0 = kMenuEventLeft;
-            else if (joy & (1 << CONTROLLER_BUTTON_DPAD_RIGHT))
+                break;
+            case 1 << CONTROLLER_BUTTON_DPAD_RIGHT:
                 event.at0 = kMenuEventRight;
-            else if (joy & (1 << CONTROLLER_BUTTON_A))
+                break;
+            case 1 << CONTROLLER_BUTTON_LEFTSHOULDER:
+                event.at0 = kMenuEventTop;
+                break;
+            case 1 << CONTROLLER_BUTTON_RIGHTSHOULDER:
+                event.at0 = kMenuEventBottom;
+                break;
+            case 1 << CONTROLLER_BUTTON_A:
                 event.at0 = kMenuEventEnter;
-            else if ((joy & (1 << CONTROLLER_BUTTON_B)) || (joy & (1 << CONTROLLER_BUTTON_START)))
+                break;
+            case 1 << CONTROLLER_BUTTON_B:
+            case 1 << CONTROLLER_BUTTON_START:
+            case 1 << CONTROLLER_BUTTON_BACK:
                 event.at0 = kMenuEventEscape;
+                break;
+            }
         }
         joyold = joy;
     }
@@ -453,6 +476,34 @@ void CGameMenu::FocusNextItem(void)
     } while(t != m_nFocus);
 }
 
+void CGameMenu::FocusTopItem(void)
+{
+    dassert(m_nFocus >= -1 && m_nFocus < m_nItems && m_nFocus < kMaxGameMenuItems);
+    int t = m_nFocus = 0; // set to top
+    do
+    {
+        if (CanSelectItem(m_nFocus))
+            break;
+        m_nFocus++;
+        if (m_nFocus >= m_nItems)
+            m_nFocus = 0;
+    } while (t != m_nFocus);
+}
+
+void CGameMenu::FocusBottomItem(void)
+{
+    dassert(m_nFocus >= -1 && m_nFocus < m_nItems && m_nFocus < kMaxGameMenuItems);
+    int t = m_nFocus = m_nItems-1; // set to bottom
+    do
+    {
+        if (CanSelectItem(m_nFocus))
+            break;
+        m_nFocus--;
+        if (m_nFocus < 0)
+            m_nFocus += m_nItems;
+    } while (t != m_nFocus);
+}
+
 bool CGameMenu::IsFocusItem(CGameMenuItem *pItem)
 {
     if (m_nFocus < 0)
@@ -495,6 +546,12 @@ bool CGameMenuItem::Event(CGameMenuEvent &event)
         break;
     case kMenuEventDown:
         pMenu->FocusNextItem();
+        break;
+    case kMenuEventTop:
+        pMenu->FocusTopItem();
+        break;
+    case kMenuEventBottom:
+        pMenu->FocusBottomItem();
         break;
     }
     return false;
@@ -1359,6 +1416,45 @@ bool CGameMenuItemKeyList::Event(CGameMenuEvent &event)
         nFocus++;
         if (nTopDelta+1 < nRows)
             nTopDelta++;
+        return false;
+    case kMenuEventTop:
+        if (event.at2 == sc_Tab || nFocus == 0)
+        {
+            pMenu->FocusPrevItem();
+            return false;
+        }
+        if (nTopDelta == 0)
+        {
+            nFocus -= 16;
+            if (nFocus < 0)
+                nFocus = 0;
+            return false;
+        }
+        for (int i = nTopDelta; i > 0 && nFocus > 0; i--)
+        {
+            nFocus--;
+            if (nTopDelta > 0)
+                nTopDelta--;
+        }
+        return false;
+    case kMenuEventBottom:
+        if (event.at2 == sc_Tab || nFocus == nGameFuncs-1)
+        {
+            pMenu->FocusNextItem();
+            return false;
+        }
+        if (nTopDelta+1 >= nRows)
+        {
+            nFocus += 16;
+            if (nFocus >= nGameFuncs)
+                nFocus = nGameFuncs-1;
+            return false;
+        }
+        while (nTopDelta+1 < nRows)
+        {
+            nFocus++;
+            nTopDelta++;
+        }
         return false;
     case kMenuEventEnter:
         if (pCallback)
@@ -3332,6 +3428,86 @@ bool CGameMenuFileSelect::Event(CGameMenuEvent &event)
         }
         MovementVerify();
         return false;
+    case kMenuEventTop:
+    {
+        int i;
+        for (i = 0; i < 16; i++) // go to top of current list
+        {
+            const int nOldTopDelta = nTopDelta[currentList];
+            auto OldFindhigh = findhigh[currentList];
+            if (findhigh[currentList] != NULL)
+            {
+                if (findhigh[currentList]->prev)
+                    findhigh[currentList] = findhigh[currentList]->prev;
+                else
+                    findhigh[currentList] = findhigh[currentList]->userb;
+            }
+            MovementVerify();
+            if (nOldTopDelta != nTopDelta[currentList])
+            {
+                nTopDelta[currentList] = nOldTopDelta;
+                findhigh[currentList] = OldFindhigh;
+                break;
+            }
+        }
+        if (i == 0 && findhigh[currentList]->prev) // move a whole page up
+        {
+            for (i = 0; i < 13; i++) // go to top of current list
+            {
+                if (findhigh[currentList] != NULL)
+                {
+                    if (findhigh[currentList]->prev)
+                        findhigh[currentList] = findhigh[currentList]->prev;
+                    else
+                        findhigh[currentList] = findhigh[currentList]->userb;
+                }
+                MovementVerify();
+                if (!findhigh[currentList]->prev)
+                    break;
+            }
+        }
+        return false;
+    }
+    case kMenuEventBottom:
+    {
+        int i;
+        for (i = 0; i < 16; i++) // go to end of current list
+        {
+            const int nOldTopDelta = nTopDelta[currentList];
+            auto OldFindhigh = findhigh[currentList];
+            if (findhigh[currentList] != NULL)
+            {
+                if (findhigh[currentList]->next)
+                    findhigh[currentList] = findhigh[currentList]->next;
+                else
+                    findhigh[currentList] = findhigh[currentList]->usera;
+            }
+            MovementVerify();
+            if (nOldTopDelta != nTopDelta[currentList])
+            {
+                nTopDelta[currentList] = nOldTopDelta;
+                findhigh[currentList] = OldFindhigh;
+                break;
+            }
+        }
+        if (i == 0 && findhigh[currentList]->next) // move a whole page down
+        {
+            for (i = 0; i < 13; i++)
+            {
+                if (findhigh[currentList] != NULL)
+                {
+                    if (findhigh[currentList]->next)
+                        findhigh[currentList] = findhigh[currentList]->next;
+                    else
+                        findhigh[currentList] = findhigh[currentList]->usera;
+                }
+                MovementVerify();
+                if (!findhigh[currentList]->next)
+                    break;
+            }
+        }
+        return false;
+    }
     case kMenuEventLeft:
     case kMenuEventRight:
         if ((currentList ? fnlist.numdirs : fnlist.numfiles) > 0)

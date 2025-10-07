@@ -60,6 +60,8 @@ enum {
     kMenuEventDelete = 10,
     kMenuEventScrollUp = 11,
     kMenuEventScrollDown = 12,
+    kMenuEventTop = 13,
+    kMenuEventBottom = 14,
 
 
     kMenuEventInit = 0x8000,
@@ -487,6 +489,8 @@ public:
     bool CanSelectItem(int nItem);
     void FocusPrevItem(void);
     void FocusNextItem(void);
+    void FocusTopItem(void);
+    void FocusBottomItem(void);
     bool IsFocusItem(CGameMenuItem *pItem);
     bool MouseEvent(CGameMenuEvent &event);
 };
