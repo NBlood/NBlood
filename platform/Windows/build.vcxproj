@@ -313,6 +313,7 @@
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\source\build\src\rev.cpp" />
+    <ClCompile Include="..\..\source\build\src\rhi.cpp" />
     <ClCompile Include="..\..\source\build\src\screenshot.cpp" />
     <ClCompile Include="..\..\source\build\src\screentext.cpp" />
     <ClCompile Include="..\..\source\build\src\scriptfile.cpp" />
@@ -421,6 +422,7 @@
     <ClInclude Include="..\..\source\build\include\rdtsc.h" />
     <ClInclude Include="..\..\source\build\include\renderlayer.h" />
     <ClInclude Include="..\..\source\build\include\rev.h" />
+    <ClInclude Include="..\..\source\build\include\rhi.h" />
     <ClInclude Include="..\..\source\build\include\scancodes.h" />
     <ClInclude Include="..\..\source\build\include\screenshot.h" />
     <ClInclude Include="..\..\source\build\include\screentext.h" />
