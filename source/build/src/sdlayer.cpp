@@ -112,7 +112,7 @@ static uint16_t sysgamma[3][256];
 #ifdef USE_OPENGL
 // OpenGL stuff
 char nogl=0;
-char usevulkan=1;
+char usevulkan=0;
 #endif
 // last gamma, contrast
 static float lastvidgcb[2];

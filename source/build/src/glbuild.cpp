@@ -29,7 +29,7 @@
 # endif
 
 BuildGLState gl;
-GLuint samplerObjectIDs[NUM_SAMPLERS];
+//GLuint samplerObjectIDs[NUM_SAMPLERS];
 
 void buildgl_outputDebugMessage(uint8_t severity, const char* format, ...)
 {
@@ -63,7 +63,7 @@ void buildgl_resetStateAccounting()
 {
     for (auto i=GL_TEXTURE0;i<MAXTEXUNIT;i++)
     {
-        buildgl_bindSamplerObject(TEXUNIT_INDEX_FROM_NAME(i), 0);
+        //buildgl_bindSamplerObject(TEXUNIT_INDEX_FROM_NAME(i), 0);
         inthash_free(&gl.state[TEXUNIT_INDEX_FROM_NAME(i)]);
     }
 
@@ -71,7 +71,7 @@ void buildgl_resetStateAccounting()
 
     for (auto i=GL_TEXTURE0;i<MAXTEXUNIT;i++)
     {
-        gl.currentBoundSampler[TEXUNIT_INDEX_FROM_NAME(i)] = SAMPLER_INVALID;
+        //gl.currentBoundSampler[TEXUNIT_INDEX_FROM_NAME(i)] = SAMPLER_INVALID;
         gl.state[TEXUNIT_INDEX_FROM_NAME(i)].count = 64;
         inthash_init(&gl.state[TEXUNIT_INDEX_FROM_NAME(i)]);
     }
@@ -181,6 +181,7 @@ void buildgl_bindTexture(GLenum target, uint32_t textureID)
 
 void buildgl_resetSamplerObjects(void)
 {
+#if 0
     glanisotropy    = clamp<int>(glanisotropy, 1, glinfo.maxanisotropy);
     gltexfiltermode = clamp(gltexfiltermode, 0, NUMGLFILTERMODES-1);
 
@@ -251,8 +252,10 @@ void buildgl_resetSamplerObjects(void)
     s = samplerObjectIDs[SAMPLER_DEPTH];
     glSamplerParameteri(s, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
     glSamplerParameteri(s, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+#endif
 }
 
+#if 0
 void buildgl_bindSamplerObject(int texunit, int32_t pth_method)
 {
     if (!buildgl_samplerObjectsEnabled())
@@ -305,6 +308,7 @@ void buildgl_bindSamplerObject(int texunit, int32_t pth_method)
         glBindSampler(texunit, samplerObjectIDs[samplerid]);
     }
 }
+#endif
 
 static inline void buildgl_multMatrix4f(const float *a, const float *b, float *r)
 {

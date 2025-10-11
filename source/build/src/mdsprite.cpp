@@ -152,7 +152,7 @@ void freeallmodels()
 
 
 // Skin texture names can be aliased! This is ugly, but at least correct.
-static void nullskintexids(GLuint texid)
+static void nullskintexids(rhiTexture texid)
 {
     int32_t i, j;
 
@@ -192,7 +192,7 @@ void clearskins(int32_t type)
             for (j=0; j<MAXPALOOKUPS; j++)
                 if (v->texid[j])
                 {
-                    glDeleteTextures(1, &v->texid[j]);
+                    rhi->texture_destroy(v->texid[j]);
                     v->texid[j] = 0;
                 }
         }
@@ -204,9 +204,9 @@ void clearskins(int32_t type)
             for (j=0; j < m2->numskins * HICTINT_MEMORY_COMBINATIONS; j++)
                 if (m2->texid[j])
                 {
-                    GLuint otexid = m2->texid[j];
+                    rhiTexture otexid = m2->texid[j];
 
-                    glDeleteTextures(1, &m2->texid[j]);
+                    rhi->texture_destroy(m2->texid[j]);
                     m2->texid[j] = 0;
 
                     nullskintexids(otexid);
@@ -216,9 +216,9 @@ void clearskins(int32_t type)
                 for (j=0; j < HICTINT_MEMORY_COMBINATIONS; j++)
                     if (sk->texid[j])
                     {
-                        GLuint otexid = sk->texid[j];
+                        rhiTexture otexid = sk->texid[j];
 
-                        glDeleteTextures(1, &sk->texid[j]);
+                        rhi->texture_destroy(sk->texid[j]);
                         sk->texid[j] = 0;
 
                         nullskintexids(otexid);
@@ -234,12 +234,12 @@ void clearskins(int32_t type)
         for (j=0; j<MAXPALOOKUPS; j++)
             if (v->texid[j])
             {
-                glDeleteTextures(1, &v->texid[j]);
+                rhi->texture_destroy(v->texid[j]);
                 v->texid[j] = 0;
             }
         if (v->texid8bit)
         {
-            glDeleteTextures(1, &v->texid8bit);
+            rhi->texture_destroy(v->texid8bit);
             v->texid8bit = 0;
         }
     }
@@ -581,7 +581,7 @@ int32_t md_undefinemodel(int32_t modelid)
     return 0;
 }
 
-static int32_t mdloadskin_notfound(char * const skinfile, char const * const fn)
+static rhiTexture mdloadskin_notfound(char * const skinfile, char const * const fn)
 {
     OSD_Printf("Skin \"%s\" not found.\n", fn);
 
@@ -589,7 +589,7 @@ static int32_t mdloadskin_notfound(char * const skinfile, char const * const fn)
     return 0;
 }
 
-static int32_t mdloadskin_failed(char * const skinfile, char const * const fn)
+static rhiTexture mdloadskin_failed(char * const skinfile, char const * const fn)
 {
     OSD_Printf("Failed loading skin file \"%s\".\n", fn);
 
@@ -598,13 +598,13 @@ static int32_t mdloadskin_failed(char * const skinfile, char const * const fn)
 }
 
 //Note: even though it says md2model, it works for both md2model&md3model
-int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
+rhiTexture mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
 {
     int32_t i;
     char *skinfile = NULL, fn[BMAX_PATH];
-    GLuint *texidx = NULL;
+    rhiTexture *texidx = NULL;
     mdskinmap_t *sk, *skzero = NULL;
-    int32_t doalloc = 1;
+    //int32_t doalloc = 1;
 
     if (m->mdnum == 2)
         surf = 0;
@@ -705,6 +705,7 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
     int32_t gotcache = texcache_readtexheader(texcacheid, &cachead, 1);
     vec2_t siz = { 0, 0 }, tsiz = { 0, 0 };
 
+#if 0
     if (gotcache && !texcache_loadskin(&cachead, &doalloc, texidx, &siz))
     {
         tsiz.x = cachead.xdim;
@@ -715,6 +716,7 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
             m->usesalpha = hasalpha;
     }
     else
+#endif
     {
         // CODEDUP: gloadtile_hi
         gotcache = 0;	// the compressed version will be saved to disk
@@ -728,7 +730,7 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
 
         // mdloadskin doesn't duplicate npow2 texture pixels
 
-        if (!glinfo.bgra)
+        if (!rhi->bgra)
         {
             for (bssize_t j = siz.x*siz.y - 1; j >= 0; j--)
                 swapchar(&pic[j].r, &pic[j].b);
@@ -736,22 +738,32 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
 
         if (pal < (MAXPALOOKUPS - RESERVEDPALS))
             m->usesalpha = hasalpha;
+#if 0
         if ((doalloc&3)==1)
             glGenTextures(1, texidx);
 
         buildgl_bindTexture(GL_TEXTURE_2D, *texidx);
+#endif
+
+        int32_t const texfmt = rhi->bgra ? RHI_FORMAT_B8G8R8A8_UNORM : RHI_FORMAT_R8G8B8A8_UNORM;
+        int const dameth = DAMETH_HI | DAMETH_MASK |
+                           TO_DAMETH_NODOWNSIZE(sk->flags) |
+                           TO_DAMETH_NOTEXCOMPRESS(sk->flags) |
+                           TO_DAMETH_ARTIMMUNITY(sk->flags) |
+                           (onebitalpha ? DAMETH_ONEBITALPHA : 0) |
+                           (hasalpha ? DAMETH_HASALPHA : 0);
+
+        rhiTextureCreateInfo info = {};
+        vec2_t texsiz;
+        info.levels = calc_texture_mipcount(siz, dameth, texsiz);
+        info.width = texsiz.x;
+        info.height = texsiz.y;
+        info.format = texfmt;
+        *texidx = rhi->texture_create(&info);
 
         //gluBuild2DMipmaps(GL_TEXTURE_2D,GL_RGBA,xsiz,ysiz,GL_BGRA_EXT,GL_UNSIGNED_BYTE,(char *)fptr);
 
-        int32_t const texfmt = glinfo.bgra ? GL_BGRA : GL_RGBA;
-
-        uploadtexture((doalloc&1), siz, texfmt, pic, tsiz,
-                      DAMETH_HI | DAMETH_MASK |
-                      TO_DAMETH_NODOWNSIZE(sk->flags) |
-                      TO_DAMETH_NOTEXCOMPRESS(sk->flags) |
-                      TO_DAMETH_ARTIMMUNITY(sk->flags) |
-                      (onebitalpha ? DAMETH_ONEBITALPHA : 0) |
-                      (hasalpha ? DAMETH_HASALPHA : 0));
+        uploadtexture(*texidx, siz, texfmt, pic, tsiz, dameth);
 
         Xfree(pic);
     }
@@ -792,6 +804,7 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
         m->skinloaded = 1+number;
     }
 
+#if 0
     int32_t const filter = (sk->flags & HICR_FORCEFILTER) ? TEXFILTER_ON : gltexfiltermode;
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
@@ -800,7 +813,9 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
     glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT, polymost_getanisotropy(filter));
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
+#endif
 
+#if 0
 #if defined USE_GLEXT && !defined EDUKE32_GLES
     if (!gotcache && glinfo.texcompr && glusetexcache && !(sk->flags & HICR_NOTEXCOMPRESS) &&
         (glusetexcompr == 2 || (glusetexcompr && !(sk->flags & HICR_ARTIMMUNITY))))
@@ -828,6 +843,7 @@ int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf)
             else
                 OSD_Printf("Cached skin \"%s\"\n", fn);
         }
+#endif
 #endif
 
     if (gloadtile_willprint)
@@ -1149,7 +1165,7 @@ static md2model_t *md2load(buildvfs_kfd fil, const char *filnam)
         if (kread_and_test(fil,m->skinfn,64*m->numskins)) { md2free(m); return nullptr; }
     }
 
-    m->texid = (GLuint *)Xcalloc(ournumskins, sizeof(GLuint) * HICTINT_MEMORY_COMBINATIONS);
+    m->texid = (rhiTexture *)Xcalloc(ournumskins, sizeof(rhiTexture) * HICTINT_MEMORY_COMBINATIONS);
 
     maxmodelverts = max(maxmodelverts, m->numverts);
     maxmodeltris = max(maxmodeltris, head.numtris);
@@ -2272,17 +2288,18 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
         // PLAG: End
 
         auto skinNum = tile2model[Ptile2tile(tspr->picnum, lpal)].skinnum;
-        i = mdloadskin((md2model_t *)m, skinNum, globalpal, surfi);
-        if (!i)
+        rhiTexture rhitex = mdloadskin((md2model_t *)m, skinNum, globalpal, surfi);
+        if (!rhitex)
             continue;
         //i = mdloadskin((md2model *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,surfi); //hack for testing multiple surfaces per MD3
 
         auto sk = mdgetskinmap(m, globalpal, skinNum, surfi);
 
-        if (sk)
-            buildgl_bindSamplerObject(0, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
+        //if (sk)
+        //    buildgl_bindSamplerObject(0, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
 
-        buildgl_bindTexture(GL_TEXTURE_2D, i);
+        //buildgl_bindTexture(GL_TEXTURE_2D, i);
+        rhi->texture_bind(rhitex);
 
         glMatrixMode(GL_TEXTURE);
         glLoadIdentity();
@@ -2295,14 +2312,14 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
             //POGOTODO: if we add support for palette indexing on model skins, the texture for the palswap could be setup here
             texunits += 4;
 
-            if ((i = r_detailmapping ? mdloadskin((md2model_t *) m, skinNum, DETAILPAL, surfi) : 0))
+            if ((rhitex = r_detailmapping ? mdloadskin((md2model_t *) m, skinNum, DETAILPAL, surfi) : 0))
             {
                 auto sk = mdgetskinmap(m, DETAILPAL, skinNum, surfi);
 
                 if (sk != nullptr)
                 {
                     polymost_useDetailMapping(true);
-                    polymost_setupdetailtexture(GL_TEXTURE3, i, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
+                    polymost_setupdetailtexture(GL_TEXTURE3, rhitex, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
 
                     f = sk->param;
 
@@ -2315,14 +2332,14 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 else VLOG_F(LOG_ENGINE, "polymost_md3draw: detail skin %d has no skinmap", skinNum);
             }
 
-            if ((i = (r_glowmapping & !(tspr->clipdist & TSPR_FLAGS_NO_GLOW)) ? mdloadskin((md2model_t *) m, skinNum, GLOWPAL, surfi) : 0))
+            if ((rhitex = (r_glowmapping & !(tspr->clipdist & TSPR_FLAGS_NO_GLOW)) ? mdloadskin((md2model_t *) m, skinNum, GLOWPAL, surfi) : 0))
             {
                 auto sk = mdgetskinmap(m, GLOWPAL, skinNum, surfi);
 
                 if (sk != nullptr)
                 {
                     polymost_useGlowMapping(true);
-                    polymost_setupglowtexture(GL_TEXTURE4, i, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
+                    polymost_setupglowtexture(GL_TEXTURE4, rhitex, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
                     glMatrixMode(GL_TEXTURE);
                     glLoadIdentity();
                     glTranslatef(xpanning, ypanning, 1.0f);

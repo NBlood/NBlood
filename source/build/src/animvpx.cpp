@@ -552,7 +552,7 @@ int32_t animvpx_render_frame(animvpx_codec_ctx *codec, double animvpx_aspect)
     }
 #endif
 
-    buildgl_bindSamplerObject(0, 0);
+    //buildgl_bindSamplerObject(0, 0);
 
     glBegin(GL_QUADS);
 

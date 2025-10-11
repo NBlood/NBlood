@@ -3,6 +3,7 @@
 
 #ifdef USE_OPENGL
 #include "hightile.h"
+#include "rhi.h"
 #endif
 
 #ifdef __cplusplus
@@ -17,7 +18,7 @@ extern "C" {
 
 #define SHARED_MODEL_DATA int32_t mdnum, shadeoff; \
                   float scale, bscale, zadd, yoffset; \
-                  GLuint *texid; \
+                  rhiTexture *texid; \
                   int32_t flags;
 
 #define IDMODEL_SHARED_DATA int32_t numframes, cframe, nframe, fpssc, usesalpha; \
@@ -50,7 +51,7 @@ typedef struct _mdskinmap_t
     int32_t skinnum, surfnum;   // Skin identifier, surface number
     char *fn;   // Skin filename
 #ifdef USE_OPENGL
-    GLuint texid[HICTINT_MEMORY_COMBINATIONS];   // OpenGL texture numbers for effect variations
+    rhiTexture texid[HICTINT_MEMORY_COMBINATIONS];   // OpenGL texture numbers for effect variations
 #endif
     struct _mdskinmap_t *next;
     float param, specpower, specfactor;
@@ -211,7 +212,7 @@ typedef struct
     vec3_t siz;
     vec3f_t piv;
     int32_t is8bit;
-    uint32_t texid8bit;
+    rhiTexture texid8bit;
 #ifdef USE_OPENGL
     GLuint vbo, vboindex;
 #endif
@@ -220,7 +221,7 @@ typedef struct
 EXTERN mdmodel_t **models;
 
 void updateanimation(md2model_t *m, tspriteptr_t tspr, uint8_t lpal);
-int32_t mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf);
+rhiTexture mdloadskin(md2model_t *m, int32_t number, int32_t pal, int32_t surf);
 void mdinit(void);
 void freeallmodels(void);
 void clearskins(int32_t type);

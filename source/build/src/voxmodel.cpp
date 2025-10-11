@@ -36,7 +36,7 @@ static int32_t gqfacind[7];
 
 
 //pitch must equal xsiz*4
-uint32_t gloadtex_indexed(const int32_t *picbuf, int32_t xsiz, int32_t ysiz)
+rhiTexture gloadtex_indexed(const int32_t *picbuf, int32_t xsiz, int32_t ysiz)
 {
     const coltype *const pic = (const coltype *)picbuf;
     char *pic2 = (char *)Xmalloc(xsiz*ysiz*sizeof(char));
@@ -49,8 +49,8 @@ uint32_t gloadtex_indexed(const int32_t *picbuf, int32_t xsiz, int32_t ysiz)
         }
     }
 
+#if 0
     uint32_t rtexid;
-
     glGenTextures(1, (GLuint *) &rtexid);
     buildgl_bindTexture(GL_TEXTURE_2D, rtexid);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
@@ -60,13 +60,26 @@ uint32_t gloadtex_indexed(const int32_t *picbuf, int32_t xsiz, int32_t ysiz)
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.f);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, ysiz, xsiz, 0, GL_RED, GL_UNSIGNED_BYTE, (char *) pic2);
+#endif
+
+    rhiTextureCreateInfo info = {};
+    info.width = ysiz;
+    info.height = xsiz;
+    info.format = RHI_FORMAT_R8_UNORM;
+    info.levels = 1;
+    rhiTexture tex = rhi->texture_create(&info);
+    rhiTextureUploadInfo info_upload = {};
+    info_upload.width = ysiz;
+    info_upload.height = xsiz;
+    info_upload.data = pic2;
+    rhi->texture_update(tex, &info_upload);
 
     Xfree(pic2);
 
-    return rtexid;
+    return rhi;
 }
 
-uint32_t gloadtex(const int32_t *picbuf, int32_t xsiz, int32_t ysiz, int32_t is8bit, int32_t dapal)
+rhiTexture gloadtex(const int32_t *picbuf, int32_t xsiz, int32_t ysiz, int32_t is8bit, int32_t dapal)
 {
     const char *const cptr = &britable[gammabrightness ? 0 : curbrightness][0];
 
@@ -104,8 +117,8 @@ uint32_t gloadtex(const int32_t *picbuf, int32_t xsiz, int32_t ysiz, int32_t is8
         }
     }
 
+#if 0
     uint32_t rtexid;
-
     glGenTextures(1, (GLuint *) &rtexid);
     buildgl_bindTexture(GL_TEXTURE_2D, rtexid);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
@@ -113,10 +126,23 @@ uint32_t gloadtex(const int32_t *picbuf, int32_t xsiz, int32_t ysiz, int32_t is8
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, xsiz, ysiz, 0, GL_RGBA, GL_UNSIGNED_BYTE, (char *) pic2);
+#endif
+
+    rhiTextureCreateInfo info = {};
+    info.width = xsiz;
+    info.height = ysiz;
+    info.format = RHI_FORMAT_R8G8B8A8_UNORM;
+    info.levels = 1;
+    rhiTexture tex = rhi->texture_create(&info);
+    rhiTextureUploadInfo info_upload = {};
+    info_upload.width = xsiz;
+    info_upload.height = ysiz;
+    info_upload.data = pic2;
+    rhi->texture_update(tex, &info_upload);
 
     Xfree(pic2);
 
-    return rtexid;
+    return tex;
 }
 
 static int32_t getvox(int32_t x, int32_t y, int32_t z)
@@ -1021,7 +1047,7 @@ voxmodel_t *voxload(const char *filnam)
             vm->piv = voxpiv;
             vm->is8bit = is8bit;
 
-            vm->texid = (uint32_t*)Xcalloc(MAXPALOOKUPS, sizeof(uint32_t));
+            vm->texid = (rhiTexture*)Xcalloc(MAXPALOOKUPS, sizeof(rhiTexture));
         }
     }
 
@@ -1135,7 +1161,7 @@ voxmodel_t *loadkvxfrombuf(const char *kvxbuffer, int32_t length)
         vm->piv.x = voxpiv.x; vm->piv.y = voxpiv.y; vm->piv.z = voxpiv.z;
         vm->is8bit = 1;
 
-        vm->texid = (uint32_t *)Xcalloc(MAXPALOOKUPS, sizeof(uint32_t));
+        vm->texid = (rhiTexture*)Xcalloc(MAXPALOOKUPS, sizeof(rhiTexture));
     }
 
     DO_FREE_AND_NULL(shcntmal);
@@ -1290,9 +1316,9 @@ int32_t polymost_voxdraw(voxmodel_t *m, tspriteptr_t const tspr)
         if (!m->texid8bit)
             m->texid8bit = gloadtex_indexed(m->mytex, m->mytexx, m->mytexy);
         else
-            buildgl_bindTexture(GL_TEXTURE_2D, m->texid8bit);
+            rhi->texture_bind(m->texid8bit);
 
-        buildgl_bindSamplerObject(0, PTH_INDEXED);
+        //buildgl_bindSamplerObject(0, PTH_INDEXED);
         
         float yp = (tspr->x-globalposx)*gcosang2+(tspr->y-globalposy)*gsinang2;
         int visShade = int(fabsf(yp*float(globvis2)*float(xdimscale)*(1.f/(256.f*128.f*65536.f))));
@@ -1313,9 +1339,9 @@ int32_t polymost_voxdraw(voxmodel_t *m, tspriteptr_t const tspr)
         if (!m->texid[globalpal])
             m->texid[globalpal] = gloadtex(m->mytex, m->mytexx, m->mytexy, m->is8bit, globalpal);
         else
-            buildgl_bindTexture(GL_TEXTURE_2D, m->texid[globalpal]);
+            rhi->texture_bind(m->texid[globalpal]);
 
-        buildgl_bindSamplerObject(0, PTH_CLAMPED);
+        // buildgl_bindSamplerObject(0, PTH_CLAMPED);
 
         polymost_usePaletteIndexing(false);
         polymost_setTexturePosSize({ 0.f, 0.f, 1.f, 1.f });

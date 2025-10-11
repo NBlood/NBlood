@@ -11,6 +11,12 @@ struct rhiState {
 
 rhiInterface *rhi;
 
+#if B_BIG_ENDIAN
+#define GL_FORMAT_TYPE GL_UNSIGNED_INT_8_8_8_8
+#else
+#define GL_FORMAT_TYPE GL_UNSIGNED_INT_8_8_8_8_REV
+#endif
+
 static struct {
 	GLuint internal_format;
 	GLuint format;
@@ -18,7 +24,8 @@ static struct {
 } gl_format_map[RHI_FORMAT_MAX] = {
 	GL_RED, GL_RED, GL_UNSIGNED_BYTE, // RHI_FORMAT_R8_UNORM
 	GL_RED, GL_RED_INTEGER, GL_UNSIGNED_BYTE, // RHI_FORMAT_R8_UINT
-	GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE, // RHI_FORMAT_R8G8B8A8_UNORM
+	GL_RGBA, GL_RGBA, GL_FORMAT_TYPE, // RHI_FORMAT_R8G8B8A8_UNORM
+	GL_BGRA, GL_BGRA, GL_FORMAT_TYPE, // RHI_FORMAT_B8G8R8A8_UNORM
 };
 
 static GLuint gl_sampler_wrap_map[RHI_SAMPLER_WRAP_MAX] = {
@@ -46,11 +53,34 @@ struct glRhi : rhiInterface
 		rhiSamplerCreateInfo info;
 	};
 
+	void init() override
+	{
+		buildgl_resetStateAccounting();
+		maxTextureSize = glinfo.maxTextureSize;
+
+#if (defined _MSC_VER) || (!defined BITNESS64)
+		if (maxTextureSize > 8192)
+			maxTextureSize = 8192;
+#endif
+		bgra = glinfo.bgra;
+	}
+
+	void reset() override
+	{
+		buildgl_resetStateAccounting();
+        buildgl_activeTexture(GL_TEXTURE0);
+	}
+
 	rhiTexture texture_create(rhiTextureCreateInfo* info) override
 	{
 		glTexture* tex = (glTexture*)Bcalloc(1, sizeof(glTexture));
 		glGenTextures(1, &tex->texture);
 		tex->info = *info;
+		tex->sampler.mag_filter = GL_NEAREST;
+		tex->sampler.min_filter = GL_NEAREST;
+		tex->sampler.wrap_s = GL_REPEAT;
+		tex->sampler.wrap_t = GL_REPEAT;
+		tex->sampler.max_anisotropy = 1.f;
 		if (!tex->texture)
 		{
 			Bfree(tex);
@@ -58,7 +88,13 @@ struct glRhi : rhiInterface
 		}
 		auto& format_map = gl_format_map[info->format];
 		buildgl_bindTexture(GL_TEXTURE_2D, tex->texture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, info->levels - 1);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1);
 		glTexImage2D(GL_TEXTURE_2D, 0, format_map.internal_format, info->width,
 			info->height, 0, format_map.format, format_map.type, nullptr);
 
@@ -117,6 +153,23 @@ struct glRhi : rhiInterface
 			glDeleteSamplers(1, &sampl->sampler);
 		Bfree(sampl);
 	}
+
+	void texture_bind(rhiTexture texture) override
+	{
+		if (!texture)
+			return;
+
+		glTexture* tex = (glTexture*)texture;
+		buildgl_bindTexture(GL_TEXTURE_2D, tex->texture);
+	}
+	virtual GLint texture_handle(rhiTexture texture) override
+	{
+		if (!texture)
+			return 0;
+
+		glTexture* tex = (glTexture*)texture;
+		return tex->texture;
+	}
 };
 
 #if 0
@@ -141,6 +194,7 @@ static rhiState state;
 
 void rhi_init()
 {
+	rhi_shutdown();
 	if (usevulkan)
 	{
 		//rhi = new vkRhi();
@@ -149,6 +203,7 @@ void rhi_init()
 	{
 		rhi = new glRhi();
 	}
+	rhi->init();
 }
 
 void rhi_shutdown()

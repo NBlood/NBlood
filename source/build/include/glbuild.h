@@ -24,6 +24,7 @@
 
 #define MAXTEXUNIT GL_TEXTURE16
 
+#if 0
 enum glsamplertype
 {
     SAMPLER_INVALID = -1,
@@ -46,13 +47,14 @@ enum glsamplerflags {
     SAMPLER_NEAREST,
     SAMPLER_CLAMPED,
 };
+#endif
 
 struct BuildGLState
 {
     GLuint currentShaderProgramID;
     GLenum currentActiveTexture;
 
-    glsamplertype currentBoundSampler[MAXTEXUNIT - GL_TEXTURE0];
+    // glsamplertype currentBoundSampler[MAXTEXUNIT - GL_TEXTURE0];
 
     GLint x, y;
     GLsizei width, height;
@@ -63,7 +65,7 @@ struct BuildGLState
 };
 
 extern BuildGLState gl;
-extern GLuint samplerObjectIDs[NUM_SAMPLERS];
+//extern GLuint samplerObjectIDs[NUM_SAMPLERS];
 
 #define TEXUNIT_INDEX_FROM_NAME(x) (x - GL_TEXTURE0)
 #define ACTIVETEX (gl.currentActiveTexture ? TEXUNIT_INDEX_FROM_NAME(gl.currentActiveTexture) : 0)
@@ -80,10 +82,10 @@ extern GLuint samplerObjectIDs[NUM_SAMPLERS];
 
 extern void buildgl_activeTexture(GLenum texture);
 extern void buildgl_bindBuffer(GLenum target, uint32_t bufferID);
-extern void buildgl_bindSamplerObject(int texunit, int32_t pth_method);
+//extern void buildgl_bindSamplerObject(int texunit, int32_t pth_method);
 extern void buildgl_bindTexture(GLenum target, uint32_t textureID);
 extern void buildgl_outputDebugMessage(uint8_t severity, const char *format, ...);
-extern void buildgl_resetSamplerObjects(void);
+//extern void buildgl_resetSamplerObjects(void);
 extern void buildgl_resetStateAccounting(void);
 extern void buildgl_setAlphaFunc(GLenum func, GLfloat ref);
 extern void buildgl_setDepthFunc(GLenum func);
@@ -118,7 +120,7 @@ extern int  buildgl_unprojectMatrixToViewport(vec3f_t win, const float *modelMat
                                               float *objz);
 
 extern int32_t r_usesamplerobjects; // FIXME: nasty circular include dependency issue
-static FORCE_INLINE bool buildgl_samplerObjectsEnabled(void) { return glinfo.samplerobjects && r_usesamplerobjects; }
+//static FORCE_INLINE bool buildgl_samplerObjectsEnabled(void) { return glinfo.samplerobjects && r_usesamplerobjects; }
 
 //////// dynamic/static API wrapping ////////
 

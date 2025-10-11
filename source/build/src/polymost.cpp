@@ -20,6 +20,7 @@ Ken Silverman's official web site: http://www.advsys.net/ken
 #include "colmatch.h"
 #include "texcache.h"
 #include "hash.h"
+#include "rhi.h"
 
 #ifdef POLYMOST2
 int32_t r_enablepolymost2 = 0;
@@ -173,13 +174,13 @@ static GLint fogColorLoc = -1;
 #endif // POLYMOST2
 
 #define PALSWAP_TEXTURE_SIZE 2048
-static GLuint tilesheetTexIDs[MAXTILESHEETS];
+static rhiTexture tilesheetTexIDs[MAXTILESHEETS];
 static GLint tilesheetSize = 0;
 static float tilesheetSizeRecip;
 static vec2f_t tilesheetHalfTexelSize = { 0.f, 0.f };
 static int32_t lastbasepal = -1;
-static GLuint paletteTextureIDs[MAXBASEPALS];
-static GLuint palswapTextureID = 0;
+static rhiTexture paletteTextureIDs[MAXBASEPALS];
+static rhiTexture palswapTextureID = 0;
 extern char const *polymost1Frag;
 extern char const *polymost1Vert;
 static GLuint polymost1CurrentShaderProgramID = 0;
@@ -337,6 +338,7 @@ void gltexapplyprops(void)
     if (videoGetRenderMode() == REND_CLASSIC)
         return;
 
+#if 0
     buildgl_resetSamplerObjects();
 
     for (bssize_t i=0; i<=GLTEXCACHEADSIZ-1; i++)
@@ -384,6 +386,7 @@ void gltexapplyprops(void)
     buildgl_bindTexture(GL_TEXTURE_2D, polymosttext);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+#endif
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -497,9 +500,8 @@ void polymost_glreset()
 {
     if (usevulkan)
         return;
-    buildgl_resetStateAccounting();
-    if (!nogl)
-        buildgl_activeTexture(GL_TEXTURE0);
+
+    rhi->reset();
 
     for (bssize_t i=0; i<=MAXPALOOKUPS-1; i++)
     {
@@ -529,11 +531,11 @@ void polymost_glreset()
 
                 if (pth->flags & PTH_HASFULLBRIGHT)
                 {
-                    glDeleteTextures(1, &pth->ofb->glpic);
+                    rhi->texture_destroy(pth->ofb->rhipic);
                     Xfree(pth->ofb);
                 }
 
-                glDeleteTextures(1, &pth->glpic);
+                rhi->texture_destroy(pth->rhipic);
                 Xfree(pth);
                 pth = next;
             }
@@ -624,9 +626,9 @@ void polymost_resetProgram()
 
     // ensure that palswapTexture and paletteTexture[curbasepal] is bound
     buildgl_activeTexture(GL_TEXTURE1);
-    buildgl_bindTexture(GL_TEXTURE_2D, palswapTextureID);
+    rhi->texture_bind(palswapTextureID);
     buildgl_activeTexture(GL_TEXTURE2);
-    buildgl_bindTexture(GL_TEXTURE_2D, paletteTextureIDs[curbasepal]);
+    rhi->texture_bind(paletteTextureIDs[curbasepal]);
     buildgl_activeTexture(GL_TEXTURE0);
     inthash_delete(&gl.state[ACTIVETEX], gl.currentActiveTexture);
 //    buildgl_bindTexture(GL_TEXTURE0, 0);
@@ -904,7 +906,7 @@ static void polymost_bindPth(pthtyp const * const pPth)
     }
     polymost_setTexturePosSize(texturePosSize);
     polymost_setHalfTexelSize(halfTexelSize);
-    buildgl_bindTexture(GL_TEXTURE_2D, pPth->glpic);
+    rhi->texture_bind(pPth->rhipic);
 }
 
 // one-time initialization of OpenGL for polymost
@@ -963,17 +965,19 @@ void polymost_glinit()
 {
     if (usevulkan)
         return;
-    buildgl_resetStateAccounting();
 
-    glHint(GL_FOG_HINT, GL_NICEST);
-    glFogi(GL_FOG_MODE, (r_usenewshading < 2) ? GL_EXP2 : GL_LINEAR);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    if (!usevulkan)
+    {
+        glHint(GL_FOG_HINT, GL_NICEST);
+        glFogi(GL_FOG_MODE, (r_usenewshading < 2) ? GL_EXP2 : GL_LINEAR);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    if (glinfo.depthclamp)
-        buildgl_setEnabled(GL_DEPTH_CLAMP);
+        if (glinfo.depthclamp)
+            buildgl_setEnabled(GL_DEPTH_CLAMP);
+    }
 
     //glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     //glEnable(GL_LINE_SMOOTH);
@@ -981,17 +985,12 @@ void polymost_glinit()
     polymost_initdrawpoly();
 
     //POGOTODO: require a max texture size >= 2048
-    tilesheetSize = glinfo.maxTextureSize;
-
-#if (defined _MSC_VER) || (!defined BITNESS64)
-    if (tilesheetSize > 8192)
-        tilesheetSize = 8192;
-#endif
+    tilesheetSize = rhi->maxTextureSize;
 
     tilesheetSizeRecip = 1.f/tilesheetSize;
     tilesheetHalfTexelSize = { 0.5f/tilesheetSize, 0.5f/tilesheetSize };
 
-    buildgl_resetSamplerObjects();
+    //buildgl_resetSamplerObjects();
 
     vec2_t maxTexDimensions = { tilesheetSize, tilesheetSize };
     char allPacked = false;
@@ -1013,20 +1012,23 @@ void polymost_glinit()
             ++numTilesheets;
         } while (!allPacked && numTilesheets < MAXTILESHEETS);
     }
+    rhiTextureCreateInfo info = {};
+    info.width = tilesheetSize;
+    info.height = tilesheetSize;
+    info.levels = 1;
+    info.format = RHI_FORMAT_R8_UNORM;
+
     for (int i = 0; i < numTilesheets; ++i)
     {
-        if (glIsTexture(tilesheetTexIDs[i])) continue;
-        glGenTextures(1, tilesheetTexIDs+i);
-        buildgl_bindTexture(GL_TEXTURE_2D, tilesheetTexIDs[i]);
-        uploadtextureindexed(true, {0, 0}, maxTexDimensions, (intptr_t) NULL);
+        tilesheetTexIDs[i] = rhi->texture_create(&info);
+        //uploadtextureindexed(tilesheetTexIDs[i], {0, 0}, maxTexDimensions, (intptr_t) NULL);
     }
 
     const char blankTex[] = {255, 255,
                              255, 255};
     Tile blankTile;
     tilepacker_getTile(0, &blankTile);
-    buildgl_bindTexture(GL_TEXTURE_2D, tilesheetTexIDs[blankTile.tilesheetID]);
-    uploadtextureindexed(false, {(int32_t) blankTile.rect.u, (int32_t) blankTile.rect.v}, {2, 2}, (intptr_t) blankTex);
+    uploadtextureindexed(tilesheetTexIDs[blankTile.tilesheetID], {(int32_t) blankTile.rect.u, (int32_t) blankTile.rect.v}, {2, 2}, (intptr_t) blankTex);
 
     if (!glIsBuffer(quadVertsID))
         glGenBuffers(1, &quadVertsID);
@@ -1698,17 +1700,18 @@ static void Polymost_DetermineTextureFormatSupport(void)
 }
 #endif
 
-static void Polymost_SendTexToDriver(int32_t const doalloc,
+static void Polymost_SendTexToDriver(rhiTexture const rhitex,
                                      vec2_t const siz,
-                                     int32_t const texfmt,
+//                                     int32_t const texfmt,
                                      coltype const * const pic,
-                                     int32_t const intexfmt,
-#if defined EDUKE32_GLES && defined SUPPORT_ETC
-                                     int32_t const comprtexfmt,
-                                     int32_t const texcompress_ok,
-#endif
+//                                     int32_t const intexfmt,
+//#if defined EDUKE32_GLES && defined SUPPORT_ETC
+//                                     int32_t const comprtexfmt,
+//                                     int32_t const texcompress_ok,
+//#endif
                                      int32_t const level)
 {
+#if 0
 #if defined EDUKE32_GLES && defined SUPPORT_ETC
     if (texcompress_ok && comprtexfmt && (siz.x & 3) == 0 && (siz.y & 3) == 0)
     {
@@ -1764,15 +1767,76 @@ static void Polymost_SendTexToDriver(int32_t const doalloc,
         glTexImage2D(GL_TEXTURE_2D, level, intexfmt, siz.x,siz.y, 0, texfmt, type, pic);
     else
         glTexSubImage2D(GL_TEXTURE_2D, level, 0,0, siz.x,siz.y, texfmt, type, pic);
+#endif
+    rhiTextureUploadInfo info = {};
+    info.width = siz.x;
+    info.height = siz.y;
+    info.level = level;
+    info.data = (void*)pic;
+
+    rhi->texture_update(rhitex, &info);
 }
 
-void uploadtexture(int32_t doalloc, vec2_t siz, int32_t texfmt,
+static void calc_gltexmaxsize()
+{
+    if (gltexmaxsize <= 0)
+    {
+        int i = rhi->maxTextureSize;
+        if (!i) gltexmaxsize = 6;   // 2^6 = 64 == default GL max texture size
+        else
+        {
+            gltexmaxsize = 0;
+            for (; i > 1; i >>= 1) gltexmaxsize++;
+#ifdef EDUKE32_GLES
+            while ((1 << (gltexmaxsize - 1)) > xdim)
+                gltexmaxsize--;
+#endif
+        }
+    }
+}
+
+int calc_texture_mipcount(vec2_t siz, int32_t dameth, vec2_t& texsiz)
+{
+    const int artimmunity = !!(dameth & DAMETH_ARTIMMUNITY);
+    const int hi = !!(dameth & DAMETH_HI);
+    const int nodownsize = !!(dameth & DAMETH_NODOWNSIZE) || artimmunity;
+
+    calc_gltexmaxsize();
+
+    gltexmiplevel = max(0, min(gltexmaxsize - 1, gltexmiplevel));
+
+    int miplevel = gltexmiplevel;
+
+    while ((siz.x >> miplevel) > (1 << gltexmaxsize) || (siz.y >> miplevel) > (1 << gltexmaxsize))
+        miplevel++;
+
+    if (hi && !nodownsize && r_downsize > miplevel)
+        miplevel = r_downsize;
+
+    texsiz = siz;
+
+    vec2_t siz2 = siz;
+    int j;
+    for (j = 1; (siz2.x > 1) || (siz2.y > 1); j++)
+    {
+        siz2 = { max(1, siz2.x >> 1), max(1, siz2.y >> 1) };  // this came from the GL_ARB_texture_non_power_of_two spec
+        if (j == miplevel)
+            texsiz = siz2;
+    }
+
+    int mipcount = j - miplevel;
+    return mipcount;
+}
+
+void uploadtexture(rhiTexture rhitex, vec2_t siz, int32_t texfmt,
                    coltype *pic, vec2_t tsiz, int32_t dameth)
 {
     const int artimmunity = !!(dameth & DAMETH_ARTIMMUNITY);
     const int hi = !!(dameth & DAMETH_HI);
     const int nodownsize = !!(dameth & DAMETH_NODOWNSIZE) || artimmunity;
     const int nomiptransfix  = !!(dameth & DAMETH_NOFIX);
+
+#if 0
     const int texcompress_ok = !(dameth & DAMETH_NOTEXCOMPRESS) && (glusetexcompr == 2 || (glusetexcompr && !artimmunity));
 
 #if !defined EDUKE32_GLES
@@ -1792,23 +1856,13 @@ void uploadtexture(int32_t doalloc, vec2_t siz, int32_t texfmt,
     (void)texcompress_ok;
 #endif
 #endif
+#else
+    int intexfmt = RHI_FORMAT_R8G8B8A8_UNORM;
+#endif
 
     dameth &= ~DAMETH_UPLOADTEXTURE_MASK;
 
-    if (gltexmaxsize <= 0)
-    {
-        GLint i = glinfo.maxTextureSize;
-        if (!i) gltexmaxsize = 6;   // 2^6 = 64 == default GL max texture size
-        else
-        {
-            gltexmaxsize = 0;
-            for (; i>1; i>>=1) gltexmaxsize++;
-#ifdef EDUKE32_GLES
-            while ((1<<(gltexmaxsize-1)) > xdim)
-                gltexmaxsize--;
-#endif
-        }
-    }
+    calc_gltexmaxsize();
 
     gltexmiplevel = max(0, min(gltexmaxsize-1, gltexmiplevel));
 
@@ -1820,6 +1874,7 @@ void uploadtexture(int32_t doalloc, vec2_t siz, int32_t texfmt,
     if (hi && !nodownsize && r_downsize > miplevel)
         miplevel = r_downsize;
 
+#if 0
     // don't use mipmaps if mipmapping is disabled
     //POGO: until the texcacheheader can be updated, generate the mipmaps texcache expects if it's enabled
     if (!glusetexcache &&
@@ -1829,23 +1884,26 @@ void uploadtexture(int32_t doalloc, vec2_t siz, int32_t texfmt,
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
     }
+#endif
 
     if (!miplevel)
-        Polymost_SendTexToDriver(doalloc, siz, texfmt, pic,
-                                 intexfmt,
-#if defined EDUKE32_GLES && defined SUPPORT_ETC
-                                 comprtexfmt,
-                                 texcompress_ok,
-#endif
+        Polymost_SendTexToDriver(rhitex, siz, /*texfmt, */pic,
+//                                 intexfmt,
+//#if defined EDUKE32_GLES && defined SUPPORT_ETC
+//                                 comprtexfmt,
+//                                 texcompress_ok,
+//#endif
                                  0);
 
     // don't generate mipmaps if we're not going to use them
+#if 0
     if (!glusetexcache &&
         (glfiltermodes[gltexfiltermode].min == GL_NEAREST ||
          glfiltermodes[gltexfiltermode].min == GL_LINEAR))
     {
         return;
     }
+#endif
 
     vec2_t siz2 = siz;
 
@@ -1896,20 +1954,21 @@ void uploadtexture(int32_t doalloc, vec2_t siz, int32_t texfmt,
         }
 
         if (j >= miplevel)
-            Polymost_SendTexToDriver(doalloc, siz3, texfmt, pic,
-                                     intexfmt,
-#if defined EDUKE32_GLES && defined SUPPORT_ETC
-                                     comprtexfmt,
-                                     texcompress_ok,
-#endif
+            Polymost_SendTexToDriver(rhitex, siz3/*, texfmt*/, pic,
+                                     //intexfmt,
+//#if defined EDUKE32_GLES && defined SUPPORT_ETC
+//                                     comprtexfmt,
+//                                     texcompress_ok,
+//#endif
                                      j - miplevel);
 
         siz2 = siz3;
     }
 }
 
-void uploadtextureindexed(int32_t doalloc, vec2_t offset, vec2_t siz, intptr_t tile)
+void uploadtextureindexed(rhiTexture rhitex, vec2_t offset, vec2_t siz, intptr_t tile)
 {
+#if 0
     if (doalloc & 1)
     {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
@@ -1924,6 +1983,15 @@ void uploadtextureindexed(int32_t doalloc, vec2_t offset, vec2_t siz, intptr_t t
     {
         glTexSubImage2D(GL_TEXTURE_2D, 0, offset.x, offset.y, siz.y, siz.x, GL_RED, GL_UNSIGNED_BYTE, (void*) tile);
     }
+#endif
+    rhiTextureUploadInfo info = {};
+    info.x = offset.x;
+    info.y = offset.y;
+    info.level = 0;
+    info.width = siz.y;
+    info.height = siz.x;
+    info.data = (void*)tile;
+    rhi->texture_update(rhitex, &info);
 }
 
 void uploadbasepalette(int32_t basepalnum)
@@ -1948,11 +2016,21 @@ void uploadbasepalette(int32_t basepalnum)
         basepalWFullBrightInfo[i*4+3] = 0-!!bitmap_test(PaletteIndexFullbright, i);
     }
 
-    char allocateTexture = !paletteTextureIDs[basepalnum];
-    if (allocateTexture)
+    if (!paletteTextureIDs[basepalnum])
     {
-        glGenTextures(1, &paletteTextureIDs[basepalnum]);
+        rhiTextureCreateInfo info = {};
+        info.width = 256;
+        info.height = 1;
+        info.levels = 1;
+        info.format = RHI_FORMAT_R8G8B8A8_UNORM;
+        paletteTextureIDs[basepalnum] = rhi->texture_create(&info);
     }
+    rhiTextureUploadInfo info = {};
+    info.width = 256;
+    info.height = 1;
+    info.data = basepalWFullBrightInfo;
+    rhi->texture_update(paletteTextureIDs[basepalnum], &info);
+#if 0
     buildgl_bindTexture(GL_TEXTURE_2D, paletteTextureIDs[basepalnum]);
     if (allocateTexture)
     {
@@ -1969,6 +2047,7 @@ void uploadbasepalette(int32_t basepalnum)
     {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, basepalWFullBrightInfo);
     }
+#endif
 }
 
 void uploadpalswap(int32_t palookupnum)
@@ -1983,6 +2062,16 @@ void uploadpalswap(int32_t palookupnum)
         return;
     }
 
+    if (!palswapTextureID)
+    {
+        rhiTextureCreateInfo info = {};
+        info.width = PALSWAP_TEXTURE_SIZE;
+        info.height = PALSWAP_TEXTURE_SIZE;
+        info.levels = 1;
+        info.format = RHI_FORMAT_R8_UNORM;
+        palswapTextureID = rhi->texture_create(&info);
+    }
+#if 0
     char allocateTexture = !palswapTextureID;
     if (allocateTexture)
     {
@@ -2000,6 +2089,7 @@ void uploadpalswap(int32_t palookupnum)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, PALSWAP_TEXTURE_SIZE, PALSWAP_TEXTURE_SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
     }
+#endif
 
     int32_t column = palookupnum%(PALSWAP_TEXTURE_SIZE/256);
     int32_t row = palookupnum/(PALSWAP_TEXTURE_SIZE/256);
@@ -2012,8 +2102,23 @@ void uploadpalswap(int32_t palookupnum)
     //POGO: There was a reason why having an extra row of black pixels was necessary along the edge of the palswap (I believe it affected a particular IHV/GPU).
     //      It may be worth investigating what this reason was again, but for now, make sure we properly initialize this row.
     static char blackPixels256[256] = {0};
+    rhiTextureUploadInfo info = {};
+    info.x = 256 * column;
+    info.y = rowOffset + numshades;
+    info.width = 256;
+    info.height = 1;
+    info.data = blackPixels256;
+    rhi->texture_update(palswapTextureID, &info);
+    info.x = 256 * column;
+    info.y = rowOffset;
+    info.width = 256;
+    info.height = numshades;
+    info.data = palookup[palookupnum];
+    rhi->texture_update(palswapTextureID, &info);
+#if 0
     glTexSubImage2D(GL_TEXTURE_2D, 0, 256*column, rowOffset+numshades, 256, 1, GL_RED, GL_UNSIGNED_BYTE, blackPixels256);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 256*column, rowOffset, 256, numshades, GL_RED, GL_UNSIGNED_BYTE, palookup[palookupnum]);
+#endif
 }
 
 
@@ -2031,6 +2136,7 @@ static int32_t tile_is_sky(int32_t tilenum)
 
 void polymost_setuptexture(const int32_t dameth, int filter)
 {
+#if 0
     gltexfiltermode = clamp(gltexfiltermode, 0, NUMGLFILTERMODES-1);
 
     if (filter == -1)
@@ -2051,14 +2157,16 @@ void polymost_setuptexture(const int32_t dameth, int filter)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
+#endif
 }
 
-static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, int32_t doalloc)
+static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth)
 {
     vec2_16_t const & tsizart = tilesiz[dapic];
     vec2_t siz = { tsizart.x, tsizart.y };
     //POGOTODO: npoty
     char npoty = 0;
+    bool doalloc = true;
 
     //POGOTODO: if !glinfo.texnpot, then we could allocate a texture of the pow2 size, and then populate the subportion using buffersubdata func
     //if (!glinfo.texnpot)
@@ -2072,15 +2180,15 @@ static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, in
             if (tile.rect.width >= (uint32_t) tsizart.y &&
                 tile.rect.height >= (uint32_t) tsizart.x)
             {
-                if (pth->glpic != 0 &&
-                    pth->glpic != tilesheetTexIDs[tile.tilesheetID])
+                if (pth->rhipic != 0 &&
+                    pth->rhipic != tilesheetTexIDs[tile.tilesheetID])
                 {
                     //POGO: we have a separate texture for this tile, but we want to merge it back into the tilesheet
-                    glDeleteTextures(1, &pth->glpic);
+                    rhi->texture_destroy(pth->rhipic);
                 }
-                pth->glpic = tilesheetTexIDs[tile.tilesheetID];
+                pth->rhipic = tilesheetTexIDs[tile.tilesheetID];
                 doalloc = false;
-            } else if (pth->glpic == tilesheetTexIDs[tile.tilesheetID])
+            } else if (pth->rhipic == tilesheetTexIDs[tile.tilesheetID])
             {
                 //POGO: we're reloading an invalidated art tile that has changed dimensions and no longer fits into our original tilesheet
                 doalloc = true;
@@ -2089,13 +2197,14 @@ static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, in
         {
             Tile blankTile = {};
             tilepacker_getTile(0, &blankTile);
-            if (pth->glpic == tilesheetTexIDs[blankTile.tilesheetID])
+            if (pth->rhipic == tilesheetTexIDs[blankTile.tilesheetID])
             {
                 //POGO: we're reloading an invalidated art tile that had previously been added to the texcache while !waloff[dapic]
                 doalloc = true;
             }
         }
 
+#if 0
         if (doalloc)
             glGenTextures(1, (GLuint *)&pth->glpic);
 
@@ -2108,13 +2217,26 @@ static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, in
             //POGO: resize our texture to match the tile data
             doalloc = true;
         }
+#endif
+        if (doalloc || ((!tileIsPacked && siz != pth->siz)))
+        {
+            if (pth->rhipic)
+                rhi->texture_destroy(pth->rhipic);
 
-        uploadtextureindexed(doalloc, {(int32_t) tile.rect.u, (int32_t) tile.rect.v}, siz, waloff[dapic]);
+            rhiTextureCreateInfo info = {};
+            info.levels = 1;
+            info.format = RHI_FORMAT_R8_UNORM;
+            info.width = siz.y;
+            info.height = siz.x;
+            pth->rhipic = rhi->texture_create(&info);
+        }
+
+        uploadtextureindexed(pth->rhipic, {(int32_t) tile.rect.u, (int32_t) tile.rect.v}, siz, waloff[dapic]);
     }
     else
     {
         tilepacker_getTile(0, &tile);
-        pth->glpic = tilesheetTexIDs[tile.tilesheetID];
+        pth->rhipic = tilesheetTexIDs[tile.tilesheetID];
     }
 
     pth->picnum = dapic;
@@ -2126,11 +2248,11 @@ static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, in
     pth->siz = siz;
 }
 
-void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t dashade, int32_t dameth, pthtyp *pth, int32_t doalloc)
+void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t dashade, int32_t dameth, pthtyp *pth)
 {
     if (dameth & DAMETH_INDEXED)
     {
-        return gloadtile_art_indexed(dapic, dameth, pth, doalloc);
+        return gloadtile_art_indexed(dapic, dameth, pth);
     }
 
     static int32_t fullbrightloadingpass = 0;
@@ -2152,6 +2274,7 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
     texcache_calcid(texcacheid, texcacheid, picdim | ((unsigned)dapal<<24u), DAMETH_NARROW_MASKPROPS(dameth) | ((unsigned)dapic<<8u) | ((unsigned)dashade<<24u), tintpalnum);
     int32_t gotcache = texcache_readtexheader(texcacheid, &cachead, 0);
 
+#if 0
     if (gotcache && !texcache_loadtile(&cachead, &doalloc, pth))
     {
         hasalpha = !!(cachead.flags & CACHEAD_HASALPHA);
@@ -2159,6 +2282,7 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
         npoty = !!(cachead.flags & CACHEAD_NPOTWALL);
     }
     else
+#endif
     {
         if (!glinfo.texnpot)
         {
@@ -2246,8 +2370,8 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
             }
         }
 
-        if (doalloc) glGenTextures(1,(GLuint *)&pth->glpic); //# of textures (make OpenGL allocate structure)
-        buildgl_bindTexture(GL_TEXTURE_2D, pth->glpic);
+        //if (doalloc) glGenTextures(1,(GLuint *)&pth->glpic); //# of textures (make OpenGL allocate structure)
+        //buildgl_bindTexture(GL_TEXTURE_2D, pth->glpic);
 
         fixtransparency(pic,tsiz,siz,dameth);
 
@@ -2272,6 +2396,7 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
             npoty = 1;
         }
 
+#if 0
         if (!doalloc)
         {
             vec2_t pthSiz2 = pth->siz;
@@ -2294,12 +2419,20 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
                 doalloc = true;
             }
         }
-        uploadtexture(doalloc, siz, GL_BGRA, pic, tsiz,
-                      dameth | DAMETH_ARTIMMUNITY |
-                      ((dapic >= MAXUSERTILES) * (DAMETH_NOTEXCOMPRESS|DAMETH_NODOWNSIZE)) | /* never process these short-lived tiles */
+#endif
+        rhiTextureCreateInfo info = {};
+        int dameth2 = dameth | DAMETH_ARTIMMUNITY |
+                      ((dapic >= MAXUSERTILES) * (DAMETH_NOTEXCOMPRESS | DAMETH_NODOWNSIZE)) | /* never process these short-lived tiles */
                       (hasfullbright * DAMETH_HASFULLBRIGHT) |
                       (npoty * DAMETH_NPOTWALL) |
-                      (hasalpha * (DAMETH_HASALPHA|DAMETH_ONEBITALPHA)));
+                      (hasalpha * (DAMETH_HASALPHA | DAMETH_ONEBITALPHA));
+        vec2_t texsiz;
+        info.levels = calc_texture_mipcount(siz, dameth2, texsiz);
+        info.format = RHI_FORMAT_B8G8R8A8_UNORM;
+        info.width = texsiz.x;
+        info.height = texsiz.y;
+        pth->rhipic = rhi->texture_create(&info);
+        uploadtexture(pth->rhipic, siz, RHI_FORMAT_B8G8R8A8_UNORM, pic, tsiz, dameth2);
 
         Xfree(pic);
     }
@@ -2314,6 +2447,7 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
     pth->hicr = NULL;
     pth->siz = tsiz;
 
+#if 0
 #if defined USE_GLEXT && !defined EDUKE32_GLES
     if (!gotcache && glinfo.texcompr && glusetexcache && glusetexcompr == 2 && dapic < MAXUSERTILES)
     {
@@ -2328,6 +2462,7 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
         texcache_writetex_fromdriver(texcacheid, &cachead);
     }
 #endif
+#endif
 
     if (hasfullbright && !fullbrightloadingpass)
     {
@@ -2340,7 +2475,7 @@ void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t das
 
         pth->flags |= PTH_HASFULLBRIGHT;
 
-        gloadtile_art(dapic, dapal, -1, 0, (dameth & ~DAMETH_MASKPROPS) | DAMETH_MASK, pth->ofb, 1);
+        gloadtile_art(dapic, dapal, -1, 0, (dameth & ~DAMETH_MASKPROPS) | DAMETH_MASK, pth->ofb);
 
         fullbrightloadingpass = 0;
     }
@@ -2523,7 +2658,7 @@ coltype *gloadtruecolortile_mdloadskin_shared(char *fn, int32_t picfillen, vec2_
 }
 
 int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp* hicr,
-                            int32_t dameth, pthtyp *pth, int32_t doalloc, polytintflags_t effect)
+                            int32_t dameth, pthtyp *pth, polytintflags_t effect)
 {
     if (!hicr) return -1;
 
@@ -2565,12 +2700,14 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
     vec2_t siz = { 0, 0 }, tsiz = { 0, 0 };
     int32_t indexed = (hicr->flags & HICR_INDEXED) && (dameth & DAMETH_INDEXED);
 
+#if 0
     if (!indexed && gotcache && !texcache_loadtile(&cachead, &doalloc, pth))
     {
         tsiz = { cachead.xdim, cachead.ydim };
         hasalpha = !!(cachead.flags & CACHEAD_HASALPHA);
     }
     else
+#endif
     {
         // CODEDUP: mdloadskin
         gotcache = 0;	// the compressed version will be saved to disk
@@ -2584,6 +2721,17 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
             hasalpha = 1;
             gloadtile_willprint=2;
 
+            if (pth->rhipic)
+                rhi->texture_destroy(pth->rhipic);
+
+            rhiTextureCreateInfo info = {};
+            info.levels = 1;
+            info.format = RHI_FORMAT_R8_UNORM;
+            info.width = tsiz.y;
+            info.height = tsiz.x;
+            pth->rhipic = rhi->texture_create(&info);
+
+#if 0
             if ((doalloc&3)==1)
                 glGenTextures(1, &pth->glpic); //# of textures (make OpenGL allocate structure)
             buildgl_bindTexture(GL_TEXTURE_2D, pth->glpic);
@@ -2595,7 +2743,8 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
                 //POGO: resize our texture to match the tile data
                 doalloc = true;
             }
-            uploadtextureindexed(doalloc, {}, tsiz, (intptr_t)pic);
+#endif
+            uploadtextureindexed(pth->rhipic, {}, tsiz, (intptr_t)pic);
 
             Xfree(pic);
         }
@@ -2630,14 +2779,17 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
             if (tsiz.x>>r_downsize <= tilesiz[dapic].x || tsiz.y>>r_downsize <= tilesiz[dapic].y)
                 hicr->flags |= HICR_ARTIMMUNITY;
 
+#if 0
             if ((doalloc&3)==1)
                 glGenTextures(1, &pth->glpic); //# of textures (make OpenGL allocate structure)
             buildgl_bindTexture(GL_TEXTURE_2D, pth->glpic);
+#endif
 
             fixtransparency(pic,tsiz,siz,dameth);
 
-            int32_t const texfmt = glinfo.bgra ? GL_BGRA : GL_RGBA;
+            int32_t const texfmt = rhi->bgra ? RHI_FORMAT_B8G8R8A8_UNORM : RHI_FORMAT_R8G8B8A8_UNORM;
 
+#if 0
             if (!doalloc)
             {
                 vec2_t pthSiz2 = pth->siz;
@@ -2655,13 +2807,21 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
                     doalloc = true;
                 }
             }
-            uploadtexture(doalloc,siz,texfmt,pic,tsiz,
-                          dameth | DAMETH_HI | DAMETH_NOFIX |
+#endif
+            rhiTextureCreateInfo info = {};
+            int dameth2 = dameth | DAMETH_HI | DAMETH_NOFIX |
                           TO_DAMETH_NODOWNSIZE(hicr->flags) |
                           TO_DAMETH_NOTEXCOMPRESS(hicr->flags) |
                           TO_DAMETH_ARTIMMUNITY(hicr->flags) |
                           (onebitalpha * DAMETH_ONEBITALPHA) |
-                          (hasalpha * DAMETH_HASALPHA));
+                          (hasalpha * DAMETH_HASALPHA);
+            vec2_t texsiz;
+            info.levels = calc_texture_mipcount(siz, dameth2, texsiz);
+            info.format = texfmt;
+            info.width = texsiz.x;
+            info.height = texsiz.y;
+            pth->rhipic = rhi->texture_create(&info);
+            uploadtexture(pth->rhipic,siz,texfmt,pic,tsiz,dameth2);
 
             Xfree(pic);
         }
@@ -2734,9 +2894,11 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
 }
 
 #ifdef USE_GLEXT
-void polymost_setupdetailtexture(const int32_t texunit, const int32_t glpic, const int32_t flags)
+void polymost_setupdetailtexture(const int32_t texunit, const rhiTexture rhipic, const int32_t flags)
 {
     buildgl_activeTexture(texunit);
+    rhi->texture_bind(rhipic);
+#if 0
     buildgl_bindTexture(GL_TEXTURE_2D, glpic);
 
     if (!buildgl_samplerObjectsEnabled())
@@ -2745,14 +2907,17 @@ void polymost_setupdetailtexture(const int32_t texunit, const int32_t glpic, con
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     }
     else buildgl_bindSamplerObject(texunit - GL_TEXTURE0, flags);
+#endif
 
     glClientActiveTexture(texunit);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 
-void polymost_setupglowtexture(const int32_t texunit, const int32_t glpic, const int32_t flags)
+void polymost_setupglowtexture(const int32_t texunit, const rhiTexture rhipic, const int32_t flags)
 {
     buildgl_activeTexture(texunit);
+    rhi->texture_bind(rhipic);
+#if 0
     buildgl_bindTexture(GL_TEXTURE_2D, glpic);
 
     if (!buildgl_samplerObjectsEnabled())
@@ -2761,6 +2926,7 @@ void polymost_setupglowtexture(const int32_t texunit, const int32_t glpic, const
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     }
     else buildgl_bindSamplerObject(texunit - GL_TEXTURE0, flags);
+#endif
 
     glClientActiveTexture(texunit);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -3035,7 +3201,8 @@ void polymost_updatePalette()
     if (curbasepal != lastbasepal)
     {
         buildgl_activeTexture(GL_TEXTURE2);
-        buildgl_bindTexture(GL_TEXTURE_2D, paletteTextureIDs[curbasepal]);
+        rhi->texture_bind(paletteTextureIDs[curbasepal]);
+        //buildgl_bindTexture(GL_TEXTURE_2D, paletteTextureIDs[curbasepal]);
         lastbasepal = curbasepal;
         buildgl_activeTexture(GL_TEXTURE0);
     }
@@ -3366,6 +3533,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
         else if (polymost_usetileshades() != TS_TEXTURE)
             polymost_setFogEnabled(false);
 
+#if 0
         if (!buildgl_samplerObjectsEnabled())
         {
             if (drawpoly_srepeat)
@@ -3384,6 +3552,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
             }
             buildgl_bindSamplerObject(0, flags);
         }
+#endif
     }
 
     // texture scale by parkar request
@@ -3415,7 +3584,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
         {
             polymost_useDetailMapping(true);
             int const unit = videoGetRenderMode() == REND_POLYMOST ? GL_TEXTURE3 : ++texunits;
-            polymost_setupdetailtexture(unit, detailpth->glpic, detailpth->flags);
+            polymost_setupdetailtexture(unit, detailpth->rhipic, detailpth->flags);
             glMatrixMode(GL_TEXTURE);
             glLoadIdentity();
 
@@ -3440,7 +3609,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
         {
             polymost_useGlowMapping(true);
             int const unit = videoGetRenderMode() == REND_POLYMOST ? GL_TEXTURE4 : ++texunits;
-            polymost_setupglowtexture(unit, glowpth->glpic, glowpth->flags);
+            polymost_setupglowtexture(unit, glowpth->rhipic, glowpth->flags);
         }
     }
 
@@ -3732,6 +3901,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
     else if (!nofog)
         polymost_setFogEnabled(true);
 
+#if 0
     if (!buildgl_samplerObjectsEnabled())
     {
         if (drawpoly_srepeat)
@@ -3740,6 +3910,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
         if (drawpoly_trepeat)
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
+#endif
 
     if (fullbright_pass == 1)
     {
@@ -9678,7 +9849,7 @@ void polymost_fillpolygon(int32_t npoints)
         if (!(pth->flags & PTH_INDEXED))
             polymost_usePaletteIndexing(false);
 
-        buildgl_bindSamplerObject(0, pth->flags);
+        //buildgl_bindSamplerObject(0, pth->flags);
     }
 
     polymost_updatePalette();
@@ -9884,7 +10055,7 @@ int32_t polymost_printtext256(int32_t xpos, int32_t ypos, int16_t col, int16_t b
 
     polymostSet2dView();	// disables blending, texturing, and depth testing
 
-    buildgl_bindSamplerObject(0, 0);
+    //buildgl_bindSamplerObject(0, 0);
     glDepthMask(GL_FALSE);	// disable writing to the z-buffer
 
 //    glPushAttrib(GL_POLYGON_BIT|GL_ENABLE_BIT);

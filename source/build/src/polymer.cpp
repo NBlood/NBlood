@@ -846,7 +846,7 @@ int32_t             polymer_init(void)
         transluctable[1] = 0x55;
     }
 
-    buildgl_resetSamplerObjects();
+    //buildgl_resetSamplerObjects();
     polymost_initdrawpoly();
 
     if (pr_verbosity >= 1) VLOG_F(LOG_PR, "Initialization complete in %d ms.", timerGetTicks()-t);
@@ -1453,7 +1453,7 @@ void                polymer_inb4rotatesprite(int16_t tilenum, char pal, int8_t s
 
     polymer_getbuildmaterial(&rotatespritematerial, tilenum, pal, shade, 0, method);
     rotatespritematerialbits = polymer_bindmaterial(&rotatespritematerial, NULL, 0);
-    buildgl_bindSamplerObject(0, PTH_CLAMPED | ((rotatespritematerialbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE));
+    //buildgl_bindSamplerObject(0, PTH_CLAMPED | ((rotatespritematerialbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE));
     buildgl_bindBuffer(GL_ARRAY_BUFFER, drawpolyVertsID);
 
     glVertexPointer(3, GL_FLOAT, 5*sizeof(float), 0);
@@ -1706,7 +1706,7 @@ int16_t             polymer_addlight(_prlight* light)
             pth = texcache_fetch(picnum, 0, 0, DAMETH_NOMASK);
 
             if (pth)
-                light->lightmap = pth->glpic;
+                light->lightmap = rhi->texture_handle(pth->rhipic);
         }
     }
 
@@ -4414,7 +4414,7 @@ static void         polymer_drawartsky(int16_t tilenum, char palnum, int8_t shad
         ++j;
     }
 
-    buildgl_bindSamplerObject(0, 0);
+    //buildgl_bindSamplerObject(0, 0);
     buildgl_setDisabled(GL_TEXTURE_2D);
 }
 
@@ -4442,7 +4442,7 @@ static void         polymer_drawskybox(int16_t tilenum, char palnum, int8_t shad
     drawingskybox = 1;
     polymer_getbuildmaterial(&skymaterial, tilenum, palnum, shade, 0, PTH_HIGHTILE|PTH_CLAMPED);
     auto skymaterialbits = polymer_bindmaterial(&skymaterial, NULL, 0);
-    buildgl_bindSamplerObject(0, PTH_HIGHTILE|PTH_CLAMPED);
+    //buildgl_bindSamplerObject(0, PTH_HIGHTILE|PTH_CLAMPED);
 
     i = 0;
     while (i < 6)
@@ -4476,7 +4476,7 @@ static void         polymer_drawskybox(int16_t tilenum, char palnum, int8_t shad
 
         glColor4f(color[0], color[1], color[2], 1.0);
         buildgl_setEnabled(GL_TEXTURE_2D);
-        buildgl_bindTexture(GL_TEXTURE_2D, pth ? pth->glpic : 0);
+        buildgl_bindTexture(GL_TEXTURE_2D, pth ? rhi->texture_handle(pth->rhipic) : 0);
         glVertexPointer(3, GL_FLOAT, 5 * sizeof(GLfloat), (GLfloat*)(4 * 5 * i * sizeof(GLfloat)));
         glTexCoordPointer(2, GL_FLOAT, 5 * sizeof(GLfloat), (GLfloat*)(((4 * 5 * i) + 3) * sizeof(GLfloat)));
         glDrawArrays(GL_QUADS, 0, 4);
@@ -4833,15 +4833,15 @@ void polymer_drawmdsprite(tspriteptr_t tspr)
             mdspritematerial.highpalookupmap = prhighpalookups[curbasepal][tspr->pal].map;
         }
 
-        mdspritematerial.diffusemap =
-                mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,targetpal,surfi);
+        mdspritematerial.diffusemap = rhi->texture_handle(
+                mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,targetpal,surfi));
         if (!mdspritematerial.diffusemap)
             continue;
 
         if (!(tsprflags & TSPR_FLAGS_MDHACK))
         {
-            mdspritematerial.detailmap =
-                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,DETAILPAL,surfi);
+            mdspritematerial.detailmap = rhi->texture_handle(
+                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,DETAILPAL,surfi));
 
             for (sk = m->skinmap; sk; sk = sk->next)
                 if ((int32_t)sk->palette == DETAILPAL &&
@@ -4849,11 +4849,11 @@ void polymer_drawmdsprite(tspriteptr_t tspr)
                     sk->surfnum == surfi)
                     mdspritematerial.detailscale[0] = mdspritematerial.detailscale[1] = sk->param;
 
-            mdspritematerial.specmap =
-                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,SPECULARPAL,surfi);
+            mdspritematerial.specmap = rhi->texture_handle(
+                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,SPECULARPAL,surfi));
 
-            mdspritematerial.normalmap =
-                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,NORMALPAL,surfi);
+            mdspritematerial.normalmap = rhi->texture_handle(
+                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,NORMALPAL,surfi));
 
             for (sk = m->skinmap; sk; sk = sk->next)
                 if ((int32_t)sk->palette == NORMALPAL &&
@@ -4863,8 +4863,8 @@ void polymer_drawmdsprite(tspriteptr_t tspr)
                     mdspritematerial.normalbias[1] = sk->specfactor;
                 }
 
-            mdspritematerial.glowmap =
-                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,GLOWPAL,surfi);
+            mdspritematerial.glowmap = rhi->texture_handle(
+                    mdloadskin((md2model_t *)m,tile2model[Ptile2tile(tspr->picnum,lpal)].skinnum,GLOWPAL,surfi));
         }
 
         glEnableClientState(GL_NORMAL_ARRAY);
@@ -5078,7 +5078,7 @@ static _prbucket*   polymer_getbuildmaterial(_prmaterial* material, int16_t tile
 
     if (pth)
     {
-        material->diffusemap = pth->glpic;
+        material->diffusemap = rhi->texture_handle(pth->rhipic);
 
         if (pth->hicr)
         {
@@ -5166,14 +5166,14 @@ static _prbucket*   polymer_getbuildmaterial(_prmaterial* material, int16_t tile
 
         // PR_BIT_GLOW_MAP
         if (r_fullbrights && pth->flags & PTH_HASFULLBRIGHT)
-            material->glowmap = pth->ofb->glpic;
+            material->glowmap = rhi->texture_handle(pth->ofb->rhipic);
     }
 
     // PR_BIT_DIFFUSE_DETAIL_MAP
     if (hicfindsubst(tilenum, DETAILPAL, 1) && (pth = texcache_fetch(tilenum, DETAILPAL, 0, DAMETH_NOMASK)) &&
         pth->hicr && (pth->hicr->palnum == DETAILPAL))
     {
-        material->detailmap = pth->glpic;
+        material->detailmap = rhi->texture_handle(pth->rhipic);
         material->detailscale[0] = pth->hicr->scale.x;
         material->detailscale[1] = pth->hicr->scale.y;
     }
@@ -5181,18 +5181,18 @@ static _prbucket*   polymer_getbuildmaterial(_prmaterial* material, int16_t tile
     // PR_BIT_GLOW_MAP
     if (hicfindsubst(tilenum, GLOWPAL, 1) && (pth = texcache_fetch(tilenum, GLOWPAL, 0, DAMETH_MASK)) &&
         pth->hicr && (pth->hicr->palnum == GLOWPAL))
-        material->glowmap = pth->glpic;
+        material->glowmap = rhi->texture_handle(pth->rhipic);
 
     // PR_BIT_SPECULAR_MAP
     if (hicfindsubst(tilenum, SPECULARPAL, 1) && (pth = texcache_fetch(tilenum, SPECULARPAL, 0, DAMETH_NOMASK)) &&
         pth->hicr && (pth->hicr->palnum == SPECULARPAL))
-        material->specmap = pth->glpic;
+        material->specmap = rhi->texture_handle(pth->rhipic);
 
     // PR_BIT_NORMAL_MAP
     if (hicfindsubst(tilenum, NORMALPAL, 1) && (pth = texcache_fetch(tilenum, NORMALPAL, 0, DAMETH_NOMASK)) &&
         pth->hicr && (pth->hicr->palnum == NORMALPAL))
     {
-        material->normalmap = pth->glpic;
+        material->normalmap = rhi->texture_handle(pth->rhipic);
         material->normalbias[0] = pth->hicr->specpower;
         material->normalbias[1] = pth->hicr->specfactor;
     }
@@ -5304,7 +5304,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     // --------- bit setup
 
     texunit = 0;
-    buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
+    //buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
 
     // PR_BIT_ANIM_INTERPOLATION
     if (programbits & (1 << PR_BIT_ANIM_INTERPOLATION))
@@ -5351,7 +5351,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
         pos[2] = -fglobalposx;
 
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
+        //buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
 
         buildgl_bindTexture(GL_TEXTURE_2D, material->normalmap);
 
@@ -5395,7 +5395,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     if (programbits & (1 << PR_BIT_ART_MAP))
     {
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_INDEXED);
+        //buildgl_bindSamplerObject(texunit, PTH_INDEXED);
         buildgl_bindTexture(GL_TEXTURE_2D, material->artmap);
 
         glUniform1i(prprogram.uniform_artMap, texunit);
@@ -5403,7 +5403,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
         texunit++;
 
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_INDEXED|PTH_CLAMPED);
+        //buildgl_bindSamplerObject(texunit, PTH_INDEXED|PTH_CLAMPED);
         buildgl_bindTexture(GL_TEXTURE_2D, material->basepalmap);
 
         glUniform1i(prprogram.uniform_basePalMap, texunit);
@@ -5411,7 +5411,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
         texunit++;
 
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_INDEXED|PTH_CLAMPED);
+        //buildgl_bindSamplerObject(texunit, PTH_INDEXED|PTH_CLAMPED);
         buildgl_bindTexture(GL_TEXTURE_RECTANGLE_ARB, material->lookupmap);
 
         glUniform1i(prprogram.uniform_lookupMap, texunit);
@@ -5444,7 +5444,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     if (programbits & (1 << PR_BIT_DIFFUSE_MAP))
     {
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
+        //buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
         buildgl_bindTexture(GL_TEXTURE_2D, material->diffusemap);
 
         glUniform1i(prprogram.uniform_diffuseMap, texunit);
@@ -5457,7 +5457,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     if (programbits & (1 << PR_BIT_HIGHPALOOKUP_MAP))
     {
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_CLAMPED);
+        //buildgl_bindSamplerObject(texunit, PTH_CLAMPED);
         buildgl_bindTexture(GL_TEXTURE_3D, material->highpalookupmap);
 
         glUniform1i(prprogram.uniform_highPalookupMap, texunit);
@@ -5481,7 +5481,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
         }
 
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_HIGHTILE);
+        //buildgl_bindSamplerObject(texunit, PTH_HIGHTILE);
         buildgl_bindTexture(GL_TEXTURE_2D, material->detailmap);
 
         glUniform1i(prprogram.uniform_detailMap, texunit);
@@ -5503,7 +5503,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     if (programbits & (1 << PR_BIT_SPECULAR_MAP))
     {
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
+        //buildgl_bindSamplerObject(texunit, (programbits & (1 << PR_BIT_ART_MAP)) ? PTH_INDEXED : PTH_HIGHTILE);
         buildgl_bindTexture(GL_TEXTURE_2D, material->specmap);
 
         glUniform1i(prprogram.uniform_specMap, texunit);
@@ -5528,7 +5528,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     if (programbits & (1 << PR_BIT_MIRROR_MAP))
     {
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_CLAMPED);
+        //buildgl_bindSamplerObject(texunit, PTH_CLAMPED);
         buildgl_bindTexture(GL_TEXTURE_RECTANGLE_ARB, material->mirrormap);
 
         glUniform1i(prprogram.uniform_mirrorMap, texunit);
@@ -5545,7 +5545,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
     if (programbits & (1 << PR_BIT_GLOW_MAP))
     {
         buildgl_activeTexture(texunit + GL_TEXTURE0);
-        buildgl_bindSamplerObject(texunit, PTH_HIGHTILE|PTH_CLAMPED);
+        //buildgl_bindSamplerObject(texunit, PTH_HIGHTILE|PTH_CLAMPED);
         buildgl_bindTexture(GL_TEXTURE_2D, material->glowmap);
 
         glUniform1i(prprogram.uniform_glowMap, texunit);
@@ -5615,7 +5615,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
                 if (programbits & (1 << PR_BIT_SHADOW_MAP))
                 {
                     buildgl_activeTexture(texunit + GL_TEXTURE0);
-                    buildgl_bindSamplerObject(texunit, PTH_DEPTH_SAMPLER);
+                    //buildgl_bindSamplerObject(texunit, PTH_DEPTH_SAMPLER);
                     buildgl_bindTexture(prrts[prlights[lights[curlight]].rtindex].target, prrts[prlights[lights[curlight]].rtindex].z);
 
                     glUniform1i(prprogram.uniform_shadowMap, texunit);
@@ -5627,7 +5627,7 @@ static int32_t      polymer_bindmaterial(const _prmaterial *material, const int1
                 if (programbits & (1 << PR_BIT_LIGHT_MAP))
                 {
                     buildgl_activeTexture(texunit + GL_TEXTURE0);
-                    buildgl_bindSamplerObject(texunit, PTH_CLAMPED);
+                    //buildgl_bindSamplerObject(texunit, PTH_CLAMPED);
                     buildgl_bindTexture(GL_TEXTURE_2D, prlights[lights[curlight]].lightmap);
 
                     glUniform1i(prprogram.uniform_lightMap, texunit);
@@ -5912,7 +5912,7 @@ static void         polymer_updatelights(void)
                 pth = texcache_fetch(picnum, 0, 0, DAMETH_NOMASK);
 
                 if (pth)
-                    light->lightmap = pth->glpic;
+                    light->lightmap = rhi->texture_handle(pth->rhipic);
             }
 
             light->rtindex = -1;

@@ -110,7 +110,7 @@ static pthtyp *texcache_tryart(int32_t const dapicnum, int32_t const dapalnum, i
 
                 // this fixes a problem where per-map art would not be refreshed properly in Polymost between maps, where both maps used mapart
                 int32_t ismapart = (tilefilenum[dapicnum] >= MAXARTFILES_BASE) ? 1 : 0;
-                gloadtile_art(dapicnum, searchpalnum, tintpalnum, dashade, dameth, pth, ismapart);
+                gloadtile_art(dapicnum, searchpalnum, tintpalnum, dashade, dameth, pth/*, ismapart*/);
                 pth->palnum = dapalnum;
             }
 
@@ -119,7 +119,7 @@ static pthtyp *texcache_tryart(int32_t const dapicnum, int32_t const dapalnum, i
 
     pth = (pthtyp *)Xcalloc(1,sizeof(pthtyp));
 
-    gloadtile_art(dapicnum, searchpalnum, tintpalnum, dashade, dameth, pth, 1);
+    gloadtile_art(dapicnum, searchpalnum, tintpalnum, dashade, dameth, pth);
 
     pth->palnum = dapalnum;
     pth->next = texcache.list[j];
@@ -214,7 +214,7 @@ pthtyp *texcache_fetch(int32_t dapicnum, int32_t dapalnum, int32_t dashade, int3
             {
                 pth->flags &= ~PTH_INVALIDATED;
 
-                int32_t tilestat = gloadtile_hi(dapicnum, dapalnum, drawingskybox, si, dameth, pth, 0,
+                int32_t tilestat = gloadtile_hi(dapicnum, dapalnum, drawingskybox, si, dameth, pth,
                                         (checktintpal > 0) ? 0 : tintflags);  // reload tile
 
                 if (!tilestat)
@@ -237,7 +237,7 @@ pthtyp *texcache_fetch(int32_t dapicnum, int32_t dapalnum, int32_t dashade, int3
         return pth;
 
     int32_t tilestat =
-    gloadtile_hi(dapicnum, dapalnum, drawingskybox, si, dameth, pth, 1, (checktintpal > 0) ? 0 : tintflags);
+    gloadtile_hi(dapicnum, dapalnum, drawingskybox, si, dameth, pth, (checktintpal > 0) ? 0 : tintflags);
 
     if (!tilestat)
     {
@@ -892,6 +892,7 @@ int32_t texcache_loadskin(const texcacheheader *head, int32_t *doalloc, GLuint *
 
 int32_t texcache_loadtile(const texcacheheader *head, int32_t *doalloc, pthtyp *pth)
 {
+#if 0
     int32_t err   = 0;
     GLenum  glerr = GL_NO_ERROR;
 
@@ -911,6 +912,8 @@ int32_t texcache_loadtile(const texcacheheader *head, int32_t *doalloc, pthtyp *
     }
 
     return 0;
+#endif
+    return -1;
 }
 
 void texcache_setupmemcache(void)

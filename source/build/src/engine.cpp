@@ -39,6 +39,7 @@
 # endif
 # include "polymost.h"
 # include "vksurface.h"
+# include "rhi.h"
 #endif
 
 //////////
@@ -12063,6 +12064,7 @@ int32_t videoSetGameMode(char davidoption, int32_t daupscaledxdim, int32_t daups
 #ifdef USE_OPENGL
     if (videoGetRenderMode() >= REND_POLYMOST)
     {
+        rhi_init();
         polymost_glreset();
         polymost_glinit();
 
@@ -15016,6 +15018,7 @@ int32_t videoSetRenderMode(int32_t renderer)
 {
 #ifdef USE_OPENGL
     buildgl_resetStateAccounting();
+    rhi_init();
 
     if (bpp == 8)
     {

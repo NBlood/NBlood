@@ -6,6 +6,7 @@
 #include "baselayer.h"  // glinfo
 #include "glad/glad.h"
 #include "hightile.h"
+#include "rhi.h"
 
 extern int32_t rendmode;
 extern float gtang;
@@ -28,8 +29,9 @@ extern void Polymost_prepare_loadboard(void);
 
 //void phex(char v, char *s);
 void polymost_setuptexture(const int32_t dameth, int filter);
-void uploadtexture(int32_t doalloc, vec2_t siz, int32_t texfmt, coltype *pic, vec2_t tsiz, int32_t dameth);
-void uploadtextureindexed(int32_t doalloc, vec2_t offset, vec2_t siz, intptr_t tile);
+int calc_texture_mipcount(vec2_t siz, int32_t dameth, vec2_t& texsiz);
+void uploadtexture(rhiTexture rhitex, vec2_t siz, int32_t texfmt, coltype *pic, vec2_t tsiz, int32_t dameth);
+void uploadtextureindexed(rhiTexture rhitex, vec2_t offset, vec2_t siz, intptr_t tile);
 void uploadbasepalette(int32_t basepalnum);
 void uploadpalswap(int32_t palookupnum);
 void polymost_drawsprite(int32_t snum);
@@ -318,7 +320,7 @@ typedef struct pthtyp_t
     struct pthtyp_t *ofb; // fullbright pixels
     hicreplctyp     *hicr;
 
-    uint32_t        glpic;
+    rhiTexture      rhipic;
     vec2f_t         scale;
     vec2_t          siz;
     int16_t         picnum;
@@ -347,8 +349,8 @@ EDUKE32_STATIC_ASSERT(TO_PTH_N64_INTENSIVITY(DAMETH_N64_INTENSIVITY) == PTH_N64_
 #define TO_PTH_N64_SCALED(dameth) (((dameth)&DAMETH_N64_SCALED)>>8)
 EDUKE32_STATIC_ASSERT(TO_PTH_N64_SCALED(DAMETH_N64_SCALED) == PTH_N64_SCALED);
 
-extern void gloadtile_art(int32_t,int32_t,int32_t,int32_t,int32_t,pthtyp *,int32_t);
-extern int32_t gloadtile_hi(int32_t,int32_t,int32_t,hicreplctyp *,int32_t,pthtyp *,int32_t,polytintflags_t);
+extern void gloadtile_art(int32_t,int32_t,int32_t,int32_t,int32_t,pthtyp *);
+extern int32_t gloadtile_hi(int32_t,int32_t,int32_t,hicreplctyp *,int32_t,pthtyp *,polytintflags_t);
 extern coltype *gloadtruecolortile_mdloadskin_shared(char* fn, int32_t picfillen, vec2_t * tsiz, vec2_t * siz, char * onebitalpha, polytintflags_t effect, int32_t dapalnum, char* al);
 extern int32_t drawingskybox;
 extern int32_t hicprecaching;
@@ -385,8 +387,8 @@ static FORCE_INLINE bool polymost_testintersection(vec3_t const &pos, vec2_t con
         || polymost_lintersect(pos.x - v.x, pos.y - v.y, pos.x + v.x, pos.y + v.y, wall[wallnum].x, wall[wallnum].y, POINT2(wallnum).x, POINT2(wallnum).y);
 }
 
-extern void polymost_setupglowtexture(const int32_t texunit, const int32_t glpic, const int32_t flags);
-extern void polymost_setupdetailtexture(const int32_t texunit, const int32_t glpic, const int32_t flags);
+extern void polymost_setupglowtexture(const int32_t texunit, const rhiTexture rhipic, const int32_t flags);
+extern void polymost_setupdetailtexture(const int32_t texunit, const rhiTexture rhipic, const int32_t flags);
 
 #endif
 

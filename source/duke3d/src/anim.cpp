@@ -466,6 +466,7 @@ int32_t Anim_Play(const char *fn)
 #ifdef USE_OPENGL
     if (videoGetRenderMode() >= REND_POLYMOST && !usevulkan)
     {
+#if 0
         if (!buildgl_samplerObjectsEnabled())
         {
             auto pth = texcache_fetch(TILE_ANIM, 0, 0, DAMETH_NOMASK);
@@ -503,6 +504,7 @@ int32_t Anim_Play(const char *fn)
                     break;
             }
         }
+#endif
     }
 #endif
 
