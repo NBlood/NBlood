@@ -1901,8 +1901,7 @@ void md3_vox_calcmat_common(tspriteptr_t tspr, const vec3f_t *a0, float f, float
     mat[14] = (mat[14] + a0->y*mat[2]) + (a0->z*mat[6] + a0->x*mat[10]);
 }
 
-static void md3draw_handle_triangles(const md3surf_t *s, uint16_t *indexhandle,
-                                            int32_t texunits, const md3model_t *M)
+static void md3draw_handle_triangles(const md3surf_t *s, uint16_t *indexhandle, const md3model_t *M)
 {
     int32_t i;
 
@@ -1943,7 +1942,8 @@ static void md3draw_handle_triangles(const md3surf_t *s, uint16_t *indexhandle,
         {
             int32_t k = s->tris[tri].i[j];
 
-#ifdef USE_GLEXT
+//#ifdef USE_GLEXT
+#if 0
             if (texunits > GL_TEXTURE0)
             {
                 int32_t l = GL_TEXTURE0;
@@ -2003,7 +2003,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
     int32_t i, surfi;
     float f, g, k0, k1, k2=0, k3=0, mat[16];  // inits: compiler-happy
     GLfloat pc[4];
-    int32_t texunits = GL_TEXTURE0;
+    //int32_t texunits = GL_TEXTURE0;
 
     const int32_t owner = tspr->owner;
     const spriteext_t *const sext = &spriteext[((unsigned)owner < MAXSPRITES+MAXUNIQHUDID) ? owner : MAXSPRITES+MAXUNIQHUDID-1];
@@ -2299,18 +2299,14 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
         //    buildgl_bindSamplerObject(0, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
 
         //buildgl_bindTexture(GL_TEXTURE_2D, i);
-        rhi->texture_bind(rhitex);
-
-        glMatrixMode(GL_TEXTURE);
-        glLoadIdentity();
-        glTranslatef(xpanning, ypanning, 1.0f);
-        glMatrixMode(GL_MODELVIEW);
+        rhi->texunit_bind(0, rhitex, tempSampler);
+        rhi->texunit_setscale(0, xpanning, ypanning, 1.f, 1.f);
 
         if (!(tsprflags & TSPR_FLAGS_MDHACK))
         {
 #ifdef USE_GLEXT
             //POGOTODO: if we add support for palette indexing on model skins, the texture for the palswap could be setup here
-            texunits += 4;
+            //texunits += 4;
 
             if ((rhitex = r_detailmapping ? mdloadskin((md2model_t *) m, skinNum, DETAILPAL, surfi) : 0))
             {
@@ -2319,15 +2315,11 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 if (sk != nullptr)
                 {
                     polymost_useDetailMapping(true);
-                    polymost_setupdetailtexture(GL_TEXTURE3, rhitex, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
+                    polymost_setupdetailtexture(3, rhitex, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
 
                     f = sk->param;
 
-                    glMatrixMode(GL_TEXTURE);
-                    glLoadIdentity();
-                    glTranslatef(xpanning, ypanning, 1.0f);
-                    glScalef(f, f, 1.0f);
-                    glMatrixMode(GL_MODELVIEW);
+                    rhi->texunit_setscale(3, xpanning, ypanning, f, f);
                 }
                 else VLOG_F(LOG_ENGINE, "polymost_md3draw: detail skin %d has no skinmap", skinNum);
             }
@@ -2339,11 +2331,8 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 if (sk != nullptr)
                 {
                     polymost_useGlowMapping(true);
-                    polymost_setupglowtexture(GL_TEXTURE4, rhitex, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
-                    glMatrixMode(GL_TEXTURE);
-                    glLoadIdentity();
-                    glTranslatef(xpanning, ypanning, 1.0f);
-                    glMatrixMode(GL_MODELVIEW);
+                    polymost_setupglowtexture(4, rhitex, (sk->flags & HICR_FORCEFILTER) ? (PTH_HIGHTILE | PTH_FORCEFILTER) : PTH_HIGHTILE);
+                    rhi->texunit_setscale(4, xpanning, ypanning, 1.f, 1.f);
                 }
                 else VLOG_F(LOG_ENGINE, "polymost_md3draw: glow skin %d has no skinmap", skinNum);
             }
@@ -2398,7 +2387,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 quicksort(m->indexes, m->maxdepths, 0, s->numtris - 1);
             }
 
-            md3draw_handle_triangles(s, indexhandle, texunits, m->usesalpha ? m : NULL);
+            md3draw_handle_triangles(s, indexhandle, m->usesalpha ? m : NULL);
         }
         else
         {
@@ -2413,7 +2402,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
 #endif
                 indexhandle = m->vindexes;
 
-            md3draw_handle_triangles(s, indexhandle, texunits, NULL);
+            md3draw_handle_triangles(s, indexhandle, NULL);
         }
 
         if (r_vertexarrays)
@@ -2425,6 +2414,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
             buildgl_bindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
             buildgl_bindBuffer(GL_ARRAY_BUFFER, m->vbos[surfi]);
 
+#if 0
             l = GL_TEXTURE0;
             do
             {
@@ -2432,6 +2422,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 glEnableClientState(GL_TEXTURE_COORD_ARRAY);
                 glTexCoordPointer(2, GL_FLOAT, 0, 0);
             } while (l <= texunits);
+#endif
 
             buildgl_bindBuffer(GL_ARRAY_BUFFER, vertvbos[curvbo]);
             glVertexPointer(3, GL_FLOAT, 0, 0);
@@ -2441,6 +2432,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
 
             buildgl_bindBuffer(GL_ARRAY_BUFFER, 0);
             buildgl_bindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+#if 0
             while (texunits > GL_TEXTURE0)
             {
                 glMatrixMode(GL_TEXTURE);
@@ -2452,6 +2444,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 glClientActiveTexture(texunits - 1);
                 buildgl_activeTexture(--texunits);
             }
+#endif
 #else
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
             glTexCoordPointer(2, GL_FLOAT, 0, &(s->uv[0].u));
@@ -2462,6 +2455,7 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
 #endif
         }
 #ifdef USE_GLEXT
+#if 0
         else // r_vertexarrays
         {
             while (texunits > GL_TEXTURE0)
@@ -2474,6 +2468,12 @@ static int32_t polymost_md3draw(md3model_t *m, tspriteptr_t tspr)
                 buildgl_activeTexture(--texunits);
             }
         } // r_vertexarrays
+#endif
+        if (!(tsprflags & TSPR_FLAGS_MDHACK))
+        {
+            rhi->texunit_unbind(3);
+            rhi->texunit_unbind(4);
+        }
 
         polymost_useDetailMapping(false);
         polymost_useGlowMapping(false);

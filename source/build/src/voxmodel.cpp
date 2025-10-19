@@ -1316,7 +1316,7 @@ int32_t polymost_voxdraw(voxmodel_t *m, tspriteptr_t const tspr)
         if (!m->texid8bit)
             m->texid8bit = gloadtex_indexed(m->mytex, m->mytexx, m->mytexy);
         else
-            rhi->texture_bind(m->texid8bit);
+            rhi->texunit_bind(0, m->texid8bit, tempSampler);
 
         //buildgl_bindSamplerObject(0, PTH_INDEXED);
         
@@ -1339,7 +1339,7 @@ int32_t polymost_voxdraw(voxmodel_t *m, tspriteptr_t const tspr)
         if (!m->texid[globalpal])
             m->texid[globalpal] = gloadtex(m->mytex, m->mytexx, m->mytexy, m->is8bit, globalpal);
         else
-            rhi->texture_bind(m->texid[globalpal]);
+            rhi->texunit_bind(0, m->texid[globalpal], tempSampler);
 
         // buildgl_bindSamplerObject(0, PTH_CLAMPED);
 

@@ -30,8 +30,8 @@ void main()
     if (data.useExtended)
     {
         PerDrawExtended data_e = bPerDrawExtended[uPushConstant.perDrawExtendedIndex];
-        v_texCoord3 = (data_e.detailMatrix * vec4(in_texCoord3, 0, 0)).xy;
-        v_texCoord4 = (data_e.glowMatrix * vec4(in_texCoord4, 0, 0)).xy;
+        v_texCoord3 = data_e.detailScale * in_texCoord3;
+        v_texCoord4 = data_e.glowScale * in_texCoord4;
     }
 
     v_fogCoord = abs(eyeCoordPosition.z);

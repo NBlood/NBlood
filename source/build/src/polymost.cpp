@@ -180,56 +180,91 @@ static float tilesheetSizeRecip;
 static vec2f_t tilesheetHalfTexelSize = { 0.f, 0.f };
 static int32_t lastbasepal = -1;
 static rhiTexture paletteTextureIDs[MAXBASEPALS];
-static rhiTexture palswapTextureID = 0;
+static rhiTexture palswapTextureID;
+rhiTexture tempSampler;
+static rhiProgram polymost1CurrentShaderProgram;
+static rhiProgram polymost1BasicShaderProgram;
+static rhiProgram polymost1ExtendedShaderProgram;
+
+enum {
+    POLYMOST_UNIFORM_TEX_SAMPLER = 0,
+    POLYMOST_UNIFORM_PALSWAP_SAMPLER,
+    POLYMOST_UNIFORM_PALETTE_SAMPLER,
+    POLYMOST_UNIFORM_TEXTURE_POS_SIZE,
+    POLYMOST_UNIFORM_HALF_TEXEL_SIZE,
+    POLYMOST_UNIFORM_PALSWAP_POS,
+    POLYMOST_UNIFORM_PALSWAP_SIZE,
+    POLYMOST_UNIFORM_CLAMP,
+    POLYMOST_UNIFORM_SHADE,
+    POLYMOST_UNIFORM_NUM_SHADES,
+    POLYMOST_UNIFORM_VISFACTOR,
+    POLYMOST_UNIFORM_FOG_ENABLED,
+    POLYMOST_UNIFORM_USE_COLOR_ONLY,
+    POLYMOST_UNIFORM_USE_PALETTE,
+    POLYMOST_UNIFORM_NPOT_EMULATION,
+    POLYMOST_UNIFORM_BRIGHTNESS,
+    POLYMOST_UNIFORM_ROTMATRIX,
+    POLYMOST_UNIFORM_SHADE_INTERPOLATE,
+    POLYMOST_UNIFORM_COLOR_CORRECTION,
+    POLYMOST_BASIC_UNIFORM_NUM,
+
+    POLYMOST_UNIFORM_DETAIL_SAMPLER = POLYMOST_BASIC_UNIFORM_NUM,
+    POLYMOST_UNIFORM_GLOW_SAMPLER,
+    POLYMOST_UNIFORM_USE_DETAIL_MAPPING,
+    POLYMOST_UNIFORM_USE_GLOW_MAPPING,
+    POLYMOST_EXTENDED_UNIFORM_NUM,
+};
+
+
 extern char const *polymost1Frag;
 extern char const *polymost1Vert;
-static GLuint polymost1CurrentShaderProgramID = 0;
-static GLuint polymost1BasicShaderProgramID = 0;
-static GLuint polymost1ExtendedShaderProgramID = 0;
-static GLint polymost1TexSamplerLoc = -1;
-static GLint polymost1PalSwapSamplerLoc = -1;
-static GLint polymost1PaletteSamplerLoc = -1;
-static GLint polymost1DetailSamplerLoc = -1;
-static GLint polymost1GlowSamplerLoc = -1;
-static GLint polymost1TexturePosSizeLoc = -1;
+//static GLuint polymost1CurrentShaderProgramID = 0;
+//static GLuint polymost1BasicShaderProgramID = 0;
+//static GLuint polymost1ExtendedShaderProgramID = 0;
+//static GLint polymost1TexSamplerLoc = -1;
+//static GLint polymost1PalSwapSamplerLoc = -1;
+//static GLint polymost1PaletteSamplerLoc = -1;
+//static GLint polymost1DetailSamplerLoc = -1;
+//static GLint polymost1GlowSamplerLoc = -1;
+//static GLint polymost1TexturePosSizeLoc = -1;
 static vec4f_t polymost1TexturePosSize = { 0.f, 0.f, 1.f, 1.f };
-static GLint polymost1HalfTexelSizeLoc = -1;
+//static GLint polymost1HalfTexelSizeLoc = -1;
 static vec2f_t polymost1HalfTexelSize = { 0.f, 0.f };
-static GLint polymost1PalswapPosLoc = -1;
+//static GLint polymost1PalswapPosLoc = -1;
 static vec2f_t polymost1PalswapPos = { 0.f, 0.f };
-static GLint polymost1PalswapSizeLoc = -1;
+//static GLint polymost1PalswapSizeLoc = -1;
 static vec2f_t polymost1PalswapSize = { 0.f, 0.f };
 static vec2f_t polymost1PalswapInnerSize = { 0.f, 0.f };
-static GLint polymost1ClampLoc = -1;
+//static GLint polymost1ClampLoc = -1;
 static vec2f_t polymost1Clamp = { 0.f, 0.f };
-static GLint polymost1ShadeLoc = -1;
+//static GLint polymost1ShadeLoc = -1;
 static float polymost1Shade = 0.f;
-static GLint polymost1NumShadesLoc = -1;
+//static GLint polymost1NumShadesLoc = -1;
 static vec2f_t polymost1NumShades = { 64.f, 1.f / 64.f };
-static GLint polymost1VisFactorLoc = -1;
+//static GLint polymost1VisFactorLoc = -1;
 static float polymost1VisFactor = 128.f;
-static GLint polymost1FogEnabledLoc = -1;
+//static GLint polymost1FogEnabledLoc = -1;
 static float polymost1FogEnabled = 1.f;
-static GLint polymost1UseColorOnlyLoc = -1;
+//static GLint polymost1UseColorOnlyLoc = -1;
 static float polymost1UseColorOnly = 0.f;
-static GLint polymost1UsePaletteLoc = -1;
+//static GLint polymost1UsePaletteLoc = -1;
 static float polymost1UsePalette = 1.f;
-static GLint polymost1UseDetailMappingLoc = -1;
+//static GLint polymost1UseDetailMappingLoc = -1;
 static float polymost1UseDetailMapping = 0.f;
-static GLint polymost1UseGlowMappingLoc = -1;
+//static GLint polymost1UseGlowMappingLoc = -1;
 static float polymost1UseGlowMapping = 0.f;
-static GLint polymost1NPOTEmulationLoc = -1;
+//static GLint polymost1NPOTEmulationLoc = -1;
 static vec4f_t polymost1NPOTEmulation = { 0.f, 1.f, 0.f, 1.f };
-static GLint polymost1BrightnessLoc = -1;
+//static GLint polymost1BrightnessLoc = -1;
 static float polymost1Brightness = 1.f;
-static GLint polymost1RotMatrixLoc = -1;
+//static GLint polymost1RotMatrixLoc = -1;
 static float polymost1RotMatrix[16] = { 1.f, 0.f, 0.f, 0.f,
                                         0.f, 1.f, 0.f, 0.f,
                                         0.f, 0.f, 1.f, 0.f,
                                         0.f, 0.f, 0.f, 1.f };
-static GLint polymost1ShadeInterpolateLoc = -1;
+//static GLint polymost1ShadeInterpolateLoc = -1;
 static float polymost1ShadeInterpolate = 1.f;
-static GLint polymost1ColorCorrectionLoc = -1;
+//static GLint polymost1ColorCorrectionLoc = -1;
 vec4f_t g_glColorCorrection = { 1.f, 1.f, 1.f, 0.f };
 
 static inline float float_trans(uint32_t maskprops, uint8_t blend)
@@ -622,25 +657,29 @@ void polymost_resetProgram()
         buildgl_useShaderProgram(polymost2BasicShaderProgramID);
     else
 #endif // POLYMOST2
-        buildgl_useShaderProgram(polymost1CurrentShaderProgramID);
+        //buildgl_useShaderProgram(polymost1CurrentShaderProgramID);
+
+    rhi->program_bind(polymost1CurrentShaderProgram);
 
     // ensure that palswapTexture and paletteTexture[curbasepal] is bound
-    buildgl_activeTexture(GL_TEXTURE1);
-    rhi->texture_bind(palswapTextureID);
-    buildgl_activeTexture(GL_TEXTURE2);
-    rhi->texture_bind(paletteTextureIDs[curbasepal]);
-    buildgl_activeTexture(GL_TEXTURE0);
+    rhi->texunit_bind(1, palswapTextureID, tempSampler);
+    rhi->texunit_bind(2, paletteTextureIDs[curbasepal], tempSampler);
+    //buildgl_activeTexture(GL_TEXTURE0);
     inthash_delete(&gl.state[ACTIVETEX], gl.currentActiveTexture);
 //    buildgl_bindTexture(GL_TEXTURE0, 0);
 }
 
-static void polymost_setCurrentShaderProgram(uint32_t programID)
+static void polymost_setCurrentShaderProgram(rhiProgram programID)
 {
-    buildgl_outputDebugMessage(3, "polymost_setCurrentShaderProgram(programID:%u)", programID);
+    if (polymost1CurrentShaderProgram == programID)
+        return;
 
-    polymost1CurrentShaderProgramID = programID;
-    buildgl_useShaderProgram(programID);
+    buildgl_outputDebugMessage(3, "polymost_setCurrentShaderProgram(programID:%u)", (uint32_t)programID);
 
+    polymost1CurrentShaderProgram = programID;
+    rhi->program_bind(programID);
+
+#if 0
     //update the uniform locations
     polymost1TexSamplerLoc = glGetUniformLocation(polymost1CurrentShaderProgramID, "s_texture");
     polymost1PalSwapSamplerLoc = glGetUniformLocation(polymost1CurrentShaderProgramID, "s_palswap");
@@ -665,59 +704,67 @@ static void polymost_setCurrentShaderProgram(uint32_t programID)
     polymost1RotMatrixLoc = glGetUniformLocation(polymost1CurrentShaderProgramID, "u_rotMatrix");
     polymost1ShadeInterpolateLoc = glGetUniformLocation(polymost1CurrentShaderProgramID, "u_shadeInterpolate");
     polymost1ColorCorrectionLoc = glGetUniformLocation(polymost1CurrentShaderProgramID, "u_colorCorrection");
+#endif
 
     //set the uniforms to the current values
-    glUniform4f(polymost1TexturePosSizeLoc, polymost1TexturePosSize.x, polymost1TexturePosSize.y, polymost1TexturePosSize.z, polymost1TexturePosSize.w);
-    glUniform2f(polymost1HalfTexelSizeLoc, polymost1HalfTexelSize.x, polymost1HalfTexelSize.y);
-    glUniform2f(polymost1PalswapPosLoc, polymost1PalswapPos.x, polymost1PalswapPos.y);
-    glUniform2f(polymost1PalswapSizeLoc, polymost1PalswapInnerSize.x, polymost1PalswapInnerSize.y);
-    glUniform2f(polymost1ClampLoc, polymost1Clamp.x, polymost1Clamp.y);
-    glUniform1f(polymost1ShadeLoc, polymost1Shade);
-    glUniform2f(polymost1NumShadesLoc, polymost1NumShades.x, polymost1NumShades.y);
-    glUniform1f(polymost1VisFactorLoc, polymost1VisFactor);
-    glUniform1f(polymost1FogEnabledLoc, polymost1FogEnabled);
-    glUniform1f(polymost1UseColorOnlyLoc, polymost1UseColorOnly);
-    glUniform1f(polymost1UsePaletteLoc, polymost1UsePalette);
-    glUniform1f(polymost1UseDetailMappingLoc, polymost1UseDetailMapping);
-    glUniform1f(polymost1UseGlowMappingLoc, polymost1UseGlowMapping);
-    glUniform4f(polymost1NPOTEmulationLoc, polymost1NPOTEmulation.x, polymost1NPOTEmulation.y, polymost1NPOTEmulation.z, polymost1NPOTEmulation.w);
-    glUniform1f(polymost1BrightnessLoc, polymost1Brightness);
-    glUniformMatrix4fv(polymost1RotMatrixLoc, 1, false, polymost1RotMatrix);
-    glUniform1f(polymost1ShadeInterpolateLoc, polymost1ShadeInterpolate);
-    glUniform4f(polymost1ColorCorrectionLoc, g_glColorCorrection.x, g_glColorCorrection.y, g_glColorCorrection.z, g_glColorCorrection.w);
+    rhi->uniform_set_float4(programID, POLYMOST_UNIFORM_TEXTURE_POS_SIZE,
+        polymost1TexturePosSize.x, polymost1TexturePosSize.y, polymost1TexturePosSize.z, polymost1TexturePosSize.w);
+    rhi->uniform_set_float2(programID, POLYMOST_UNIFORM_HALF_TEXEL_SIZE, polymost1HalfTexelSize.x, polymost1HalfTexelSize.y);
+    rhi->uniform_set_float2(programID, POLYMOST_UNIFORM_PALSWAP_POS, polymost1PalswapPos.x, polymost1PalswapPos.y);
+    rhi->uniform_set_float2(programID, POLYMOST_UNIFORM_PALSWAP_SIZE, polymost1PalswapInnerSize.x, polymost1PalswapInnerSize.y);
+    rhi->uniform_set_float2(programID, POLYMOST_UNIFORM_CLAMP, polymost1Clamp.x, polymost1Clamp.y);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_SHADE, polymost1Shade);
+    rhi->uniform_set_float2(programID, POLYMOST_UNIFORM_NUM_SHADES, polymost1NumShades.x, polymost1NumShades.y);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_VISFACTOR, polymost1VisFactor);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_FOG_ENABLED, polymost1FogEnabled);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_USE_COLOR_ONLY, polymost1UseColorOnly);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_USE_PALETTE, polymost1UsePalette);
+    rhi->uniform_set_float4(programID, POLYMOST_UNIFORM_NPOT_EMULATION,
+        polymost1NPOTEmulation.x, polymost1NPOTEmulation.y, polymost1NPOTEmulation.z, polymost1NPOTEmulation.w);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_BRIGHTNESS, polymost1Brightness);
+    rhi->uniform_set_matrix(programID, POLYMOST_UNIFORM_ROTMATRIX, polymost1RotMatrix);
+    rhi->uniform_set_float(programID, POLYMOST_UNIFORM_SHADE_INTERPOLATE, polymost1ShadeInterpolate);
+    rhi->uniform_set_float4(programID, POLYMOST_UNIFORM_COLOR_CORRECTION, g_glColorCorrection.x, g_glColorCorrection.y, g_glColorCorrection.z, g_glColorCorrection.w);
+    if (programID == polymost1ExtendedShaderProgram)
+    {
+        rhi->uniform_set_float(programID, POLYMOST_UNIFORM_USE_DETAIL_MAPPING, polymost1UseDetailMapping);
+        rhi->uniform_set_float(programID, POLYMOST_UNIFORM_USE_GLOW_MAPPING, polymost1UseGlowMapping);
+    }
 }
 
 void polymost_setColorCorrection(vec4f_t const &colorCorrection)
 {
-    if (!gl.currentShaderProgramID || gl.currentShaderProgramID != polymost1CurrentShaderProgramID)
+    if (!polymost1CurrentShaderProgram)
         return;
 
-    glUniform4f(polymost1ColorCorrectionLoc, colorCorrection.x, colorCorrection.y, colorCorrection.z, colorCorrection.w);
+    rhi->uniform_set_float4(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_COLOR_CORRECTION,
+        colorCorrection.x, colorCorrection.y, colorCorrection.z, colorCorrection.w);
 }
 
 void polymost_setTexturePosSize(vec4f_t const &texturePosSize)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID)
-        return;
-
     polymost1TexturePosSize = texturePosSize;
-    glUniform4f(polymost1TexturePosSizeLoc, polymost1TexturePosSize.x, polymost1TexturePosSize.y, polymost1TexturePosSize.z, polymost1TexturePosSize.w);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float4(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_TEXTURE_POS_SIZE,
+            polymost1TexturePosSize.x, polymost1TexturePosSize.y, polymost1TexturePosSize.z, polymost1TexturePosSize.w);
 }
 
 void polymost_setHalfTexelSize(vec2f_t const &halfTexelSize)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || (halfTexelSize.x == polymost1HalfTexelSize.x && halfTexelSize.y == polymost1HalfTexelSize.y))
+    if (halfTexelSize.x == polymost1HalfTexelSize.x && halfTexelSize.y == polymost1HalfTexelSize.y)
         return;
 
     polymost1HalfTexelSize = halfTexelSize;
-    glUniform2f(polymost1HalfTexelSizeLoc, polymost1HalfTexelSize.x, polymost1HalfTexelSize.y);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float2(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_HALF_TEXEL_SIZE,
+            polymost1HalfTexelSize.x, polymost1HalfTexelSize.y);
 }
 
 static void polymost_setPalswap(uint32_t index)
 {
     static uint32_t lastPalswapIndex;
 
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || index == lastPalswapIndex)
+    if (index == lastPalswapIndex)
         return;
 
     lastPalswapIndex = index;
@@ -725,21 +772,22 @@ static void polymost_setPalswap(uint32_t index)
     polymost1PalswapPos.y = floorf(polymost1PalswapPos.x);
     polymost1PalswapPos = { polymost1PalswapPos.x - polymost1PalswapPos.y + (0.5f/PALSWAP_TEXTURE_SIZE),
                             polymost1PalswapPos.y * polymost1PalswapSize.y + (0.5f/PALSWAP_TEXTURE_SIZE) };
-    glUniform2f(polymost1PalswapPosLoc, polymost1PalswapPos.x, polymost1PalswapPos.y);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float2(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_PALSWAP_POS,
+            polymost1PalswapPos.x, polymost1PalswapPos.y);
 }
 
 static void polymost_setPalswapSize(uint32_t width, uint32_t height)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID)
-        return;
-
     polymost1PalswapSize = { width*(1.f/PALSWAP_TEXTURE_SIZE),
                              height*(1.f/PALSWAP_TEXTURE_SIZE) };
 
     polymost1PalswapInnerSize = { (width-1)*(1.f/PALSWAP_TEXTURE_SIZE),
                                   (height-1)*(1.f/PALSWAP_TEXTURE_SIZE) };
 
-    glUniform2f(polymost1PalswapSizeLoc, polymost1PalswapInnerSize.x, polymost1PalswapInnerSize.y);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float2(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_PALSWAP_SIZE,
+            polymost1PalswapInnerSize.x, polymost1PalswapInnerSize.y);
 }
 
 char polymost_getClamp()
@@ -751,18 +799,17 @@ void polymost_setClamp(char clamp)
 {
     vec2f_t clampy = { float(clamp & 1), float(clamp >> 1) };
 
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || clampy == polymost1Clamp)
+    if (clampy == polymost1Clamp)
         return;
 
     polymost1Clamp = clampy;
-    glUniform2f(polymost1ClampLoc, polymost1Clamp.x, polymost1Clamp.y);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float2(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_CLAMP,
+            polymost1Clamp.x, polymost1Clamp.y);
 }
 
 static void polymost_setShade(int32_t shade)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID)
-        return;
-
     if (polymost_usetileshades() != TS_SHADETABLE)
         shade = 0;
 
@@ -773,22 +820,22 @@ static void polymost_setShade(int32_t shade)
     {
         lastShade = shade;
         polymost1Shade = shade;
-        glUniform1f(polymost1ShadeLoc, polymost1Shade);
+        if (polymost1CurrentShaderProgram)
+            rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_SHADE, polymost1Shade);
     }
 
     if (numshades != lastNumShades)
     {
         lastNumShades = numshades;
         polymost1NumShades = { (float)numshades, 1.f / numshades };
-        glUniform2f(polymost1NumShadesLoc, polymost1NumShades.x, polymost1NumShades.y);
+        if (polymost1CurrentShaderProgram)
+            rhi->uniform_set_float2(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_NUM_SHADES,
+                polymost1NumShades.x, polymost1NumShades.y);
     }
 }
 
 void polymost_setVisibility(float visibility)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID)
-        return;
-
     if (polymost_usetileshades() != TS_SHADETABLE)
         visibility = -16;
 
@@ -797,87 +844,91 @@ void polymost_setVisibility(float visibility)
         return;
 
     polymost1VisFactor = visFactor;
-    glUniform1f(polymost1VisFactorLoc, polymost1VisFactor);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_VISFACTOR, polymost1VisFactor);
 }
 
 void polymost_setFogEnabled(char fogEnabled)
 {
-    if (usevulkan)
-        return;
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || fogEnabled == polymost1FogEnabled)
+    if (fogEnabled == polymost1FogEnabled)
         return;
 
     polymost1FogEnabled = fogEnabled;
-    glUniform1f(polymost1FogEnabledLoc, polymost1FogEnabled);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_FOG_ENABLED, polymost1FogEnabled);
 }
 
 void polymost_useColorOnly(char useColorOnly)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || useColorOnly == polymost1UseColorOnly)
+    if (useColorOnly == polymost1UseColorOnly)
         return;
 
     polymost1UseColorOnly = useColorOnly;
-    glUniform1f(polymost1UseColorOnlyLoc, polymost1UseColorOnly);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_USE_COLOR_ONLY, polymost1UseColorOnly);
 }
 
 void polymost_usePaletteIndexing(char usePaletteIndexing)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || usePaletteIndexing == polymost1UsePalette)
+    if (usePaletteIndexing == polymost1UsePalette)
         return;
-
     polymost1UsePalette = usePaletteIndexing;
-    glUniform1f(polymost1UsePaletteLoc, polymost1UsePalette);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_USE_PALETTE, polymost1UsePalette);
 }
 
 void polymost_useDetailMapping(char useDetailMapping)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || useDetailMapping == polymost1UseDetailMapping)
+    if (useDetailMapping == polymost1UseDetailMapping)
         return;
 
-    if (useDetailMapping)
-        polymost_setCurrentShaderProgram(polymost1ExtendedShaderProgramID);
-
     polymost1UseDetailMapping = useDetailMapping;
-    glUniform1f(polymost1UseDetailMappingLoc, polymost1UseDetailMapping);
+    if (polymost1CurrentShaderProgram)
+    {
+        polymost_setCurrentShaderProgram(polymost1ExtendedShaderProgram);
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_USE_DETAIL_MAPPING, polymost1UseDetailMapping);
+    }
 }
 
 void polymost_useGlowMapping(char useGlowMapping)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || useGlowMapping == polymost1UseGlowMapping)
+    if (!polymost1CurrentShaderProgram || useGlowMapping == polymost1UseGlowMapping)
         return;
 
-    if (useGlowMapping)
-        polymost_setCurrentShaderProgram(polymost1ExtendedShaderProgramID);
-
     polymost1UseGlowMapping = useGlowMapping;
-    glUniform1f(polymost1UseGlowMappingLoc, polymost1UseGlowMapping);
+    if (polymost1CurrentShaderProgram)
+    {
+        polymost_setCurrentShaderProgram(polymost1ExtendedShaderProgram);
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_USE_GLOW_MAPPING, polymost1UseGlowMapping);
+    }
 }
 
 void polymost_npotEmulation(char npotEmulation, float factor, float xOffset)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || npotEmulation == polymost1NPOTEmulation.z)
+    if (npotEmulation == polymost1NPOTEmulation.z)
         return;
 
     polymost1NPOTEmulation = { xOffset, factor, (float)npotEmulation, 1.f/factor };
-    glUniform4f(polymost1NPOTEmulationLoc, polymost1NPOTEmulation.x, polymost1NPOTEmulation.y, polymost1NPOTEmulation.z, polymost1NPOTEmulation.w);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float4(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_NPOT_EMULATION,
+            polymost1NPOTEmulation.x, polymost1NPOTEmulation.y, polymost1NPOTEmulation.z, polymost1NPOTEmulation.w);
 }
 
 void polymost_shadeInterpolate(int32_t shadeInterpolate)
 {
-    if (gl.currentShaderProgramID != polymost1CurrentShaderProgramID || shadeInterpolate == polymost1ShadeInterpolate)
+    if (!polymost1CurrentShaderProgram || shadeInterpolate == polymost1ShadeInterpolate)
         return;
 
     polymost1ShadeInterpolate = shadeInterpolate;
-    glUniform1f(polymost1ShadeInterpolateLoc, polymost1ShadeInterpolate);
+    if (polymost1CurrentShaderProgram)
+         rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_SHADE_INTERPOLATE, polymost1ShadeInterpolate);
 }
 
 void polymost_setBrightness(int brightness)
 {
-    if (gl.currentShaderProgramID == polymost1CurrentShaderProgramID)
-    {
-        polymost1Brightness = 8.f / (brightness + 8.f);
-        glUniform1f(polymost1BrightnessLoc, polymost1Brightness);
-    }
+    polymost1Brightness = 8.f / (brightness + 8.f);
+    if (polymost1CurrentShaderProgram)
+        rhi->uniform_set_float(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_BRIGHTNESS, polymost1Brightness);
 }
 
 static void polymost_bindPth(pthtyp const * const pPth)
@@ -906,7 +957,7 @@ static void polymost_bindPth(pthtyp const * const pPth)
     }
     polymost_setTexturePosSize(texturePosSize);
     polymost_setHalfTexelSize(halfTexelSize);
-    rhi->texture_bind(pPth->rhipic);
+    rhi->texunit_bind(0, pPth->rhipic, tempSampler);
 }
 
 // one-time initialization of OpenGL for polymost
@@ -1030,6 +1081,7 @@ void polymost_glinit()
     tilepacker_getTile(0, &blankTile);
     uploadtextureindexed(tilesheetTexIDs[blankTile.tilesheetID], {(int32_t) blankTile.rect.u, (int32_t) blankTile.rect.v}, {2, 2}, (intptr_t) blankTex);
 
+#if 0
     if (!glIsBuffer(quadVertsID))
         glGenBuffers(1, &quadVertsID);
     buildgl_bindBuffer(GL_ARRAY_BUFFER, quadVertsID);
@@ -1048,6 +1100,7 @@ void polymost_glinit()
     glVertexAttribPointer(1, 2, GL_FLOAT, false, sizeof(float) * 5, (const void*) (sizeof(float) * 3));
 
     buildgl_bindBuffer(GL_ARRAY_BUFFER, 0);
+#endif
 
 #ifdef POLYMOST2
     const char* const POLYMOST2_BASIC_VERTEX_SHADER_CODE =
@@ -1130,6 +1183,7 @@ void polymost_glinit()
     fogColorLoc = glGetUniformLocation(polymost2BasicShaderProgramID, "u_fogColor");
 #endif // POLYMOST2
 
+#if 0
     GLuint polymost1BasicVertexShaderID = 0;
     GLuint polymost1ExtendedFragmentShaderID = 0;
     GLuint polymost1BasicFragmentShaderID = 0;
@@ -1199,6 +1253,113 @@ void polymost_glinit()
     glUniform1i(polymost1PalSwapSamplerLoc, 1);
     glUniform1i(polymost1PaletteSamplerLoc, 2);
     buildgl_useShaderProgram(0);
+#endif
+
+    if (!polymost1BasicShaderProgram || !polymost1ExtendedShaderProgram)
+    {
+        rhiProgramUniformInfo uniforms[POLYMOST_EXTENDED_UNIFORM_NUM];
+
+        uniforms[POLYMOST_UNIFORM_TEX_SAMPLER].type = RHI_UNIFORM_TEXUNIT;
+        uniforms[POLYMOST_UNIFORM_TEX_SAMPLER].gl_name = "s_texture";
+        uniforms[POLYMOST_UNIFORM_PALSWAP_SAMPLER].type = RHI_UNIFORM_TEXUNIT;
+        uniforms[POLYMOST_UNIFORM_PALSWAP_SAMPLER].gl_name = "s_palswap";
+        uniforms[POLYMOST_UNIFORM_PALETTE_SAMPLER].type = RHI_UNIFORM_TEXUNIT;
+        uniforms[POLYMOST_UNIFORM_PALETTE_SAMPLER].gl_name = "s_palette";
+        uniforms[POLYMOST_UNIFORM_TEXTURE_POS_SIZE].type = RHI_UNIFORM_FLOAT4;
+        uniforms[POLYMOST_UNIFORM_TEXTURE_POS_SIZE].gl_name = "u_texturePosSize";
+        uniforms[POLYMOST_UNIFORM_HALF_TEXEL_SIZE].type = RHI_UNIFORM_FLOAT2;
+        uniforms[POLYMOST_UNIFORM_HALF_TEXEL_SIZE].gl_name = "u_halfTexelSize";
+        uniforms[POLYMOST_UNIFORM_PALSWAP_POS].type = RHI_UNIFORM_FLOAT2;
+        uniforms[POLYMOST_UNIFORM_PALSWAP_POS].gl_name = "u_palswapPos";
+        uniforms[POLYMOST_UNIFORM_PALSWAP_SIZE].type = RHI_UNIFORM_FLOAT2;
+        uniforms[POLYMOST_UNIFORM_PALSWAP_SIZE].gl_name = "u_palswapSize";
+        uniforms[POLYMOST_UNIFORM_CLAMP].type = RHI_UNIFORM_FLOAT2;
+        uniforms[POLYMOST_UNIFORM_CLAMP].gl_name = "u_clamp";
+        uniforms[POLYMOST_UNIFORM_SHADE].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_SHADE].gl_name = "u_shade";
+        uniforms[POLYMOST_UNIFORM_NUM_SHADES].type = RHI_UNIFORM_FLOAT2;
+        uniforms[POLYMOST_UNIFORM_NUM_SHADES].gl_name = "u_numShades";
+        uniforms[POLYMOST_UNIFORM_VISFACTOR].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_VISFACTOR].gl_name = "u_visFactor";
+        uniforms[POLYMOST_UNIFORM_FOG_ENABLED].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_FOG_ENABLED].gl_name = "u_fogEnabled";
+        uniforms[POLYMOST_UNIFORM_USE_COLOR_ONLY].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_USE_COLOR_ONLY].gl_name = "u_useColorOnly";
+        uniforms[POLYMOST_UNIFORM_USE_PALETTE].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_USE_PALETTE].gl_name = "u_usePalette";
+        uniforms[POLYMOST_UNIFORM_NPOT_EMULATION].type = RHI_UNIFORM_FLOAT4;
+        uniforms[POLYMOST_UNIFORM_NPOT_EMULATION].gl_name = "u_npotEmulation";
+        uniforms[POLYMOST_UNIFORM_BRIGHTNESS].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_BRIGHTNESS].gl_name = "u_brightness";
+        uniforms[POLYMOST_UNIFORM_ROTMATRIX].type = RHI_UNIFORM_MATRIX;
+        uniforms[POLYMOST_UNIFORM_ROTMATRIX].gl_name = "u_rotMatrix";
+        uniforms[POLYMOST_UNIFORM_SHADE_INTERPOLATE].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_SHADE_INTERPOLATE].gl_name = "u_shadeInterpolate";
+        uniforms[POLYMOST_UNIFORM_COLOR_CORRECTION].type = RHI_UNIFORM_FLOAT4;
+        uniforms[POLYMOST_UNIFORM_COLOR_CORRECTION].gl_name = "u_colorCorrection";
+
+        uniforms[POLYMOST_UNIFORM_DETAIL_SAMPLER].type = RHI_UNIFORM_TEXUNIT;
+        uniforms[POLYMOST_UNIFORM_DETAIL_SAMPLER].gl_name = "s_detail";
+        uniforms[POLYMOST_UNIFORM_GLOW_SAMPLER].type = RHI_UNIFORM_TEXUNIT;
+        uniforms[POLYMOST_UNIFORM_GLOW_SAMPLER].gl_name = "s_glow";
+        uniforms[POLYMOST_UNIFORM_USE_DETAIL_MAPPING].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_USE_DETAIL_MAPPING].gl_name = "u_useDetailMapping";
+        uniforms[POLYMOST_UNIFORM_USE_GLOW_MAPPING].type = RHI_UNIFORM_FLOAT;
+        uniforms[POLYMOST_UNIFORM_USE_GLOW_MAPPING].gl_name = "u_useGlowMapping";
+
+        if (!polymost1BasicShaderProgram)
+        {
+            int const polymost1BasicFragLen = Bstrlen(polymost1Frag);
+            auto      polymost1BasicFrag = (char*)Xmalloc(polymost1BasicFragLen+1);
+
+            Bmemcpy(polymost1BasicFrag, polymost1Frag, polymost1BasicFragLen);
+            polymost1BasicFrag[polymost1BasicFragLen] = 0;
+
+            char* extDefineSubstr = Bstrstr(polymost1BasicFrag, " #define POLYMOST1_EXTENDED");
+
+            if (extDefineSubstr)
+            {
+                //Disable extensions for basic fragment shader
+                extDefineSubstr[0] = '/';
+                extDefineSubstr[1] = '/';
+            }
+
+            rhiProgramInfo info{};
+            info.glsl_vertex_shader = polymost1Vert;
+            info.glsl_fragment_shader = polymost1BasicFrag;
+            info.uniform_count = POLYMOST_BASIC_UNIFORM_NUM;
+            info.uniforms = uniforms;
+            info.texunits = 3;
+            polymost1BasicShaderProgram = rhi->create_program(&info);
+
+            DO_FREE_AND_NULL(polymost1BasicFrag);
+        }
+
+        if (!polymost1ExtendedShaderProgram)
+        {
+            rhiProgramInfo info{};
+            info.glsl_vertex_shader = polymost1Vert;
+            info.glsl_fragment_shader = polymost1Frag;
+            info.uniform_count = POLYMOST_EXTENDED_UNIFORM_NUM;
+            info.uniforms = uniforms;
+            info.texunits = 5;
+            polymost1ExtendedShaderProgram = rhi->create_program(&info);
+        }
+    }
+
+    // set defaults
+    rhi->uniform_set_texunit(polymost1BasicShaderProgram, POLYMOST_UNIFORM_TEX_SAMPLER, 0);
+    rhi->uniform_set_texunit(polymost1BasicShaderProgram, POLYMOST_UNIFORM_PALSWAP_SAMPLER, 1);
+    rhi->uniform_set_texunit(polymost1BasicShaderProgram, POLYMOST_UNIFORM_PALETTE_SAMPLER, 2);
+    polymost_setPalswapSize(256, numshades + 1);
+
+    rhi->uniform_set_texunit(polymost1ExtendedShaderProgram, POLYMOST_UNIFORM_TEX_SAMPLER, 0);
+    rhi->uniform_set_texunit(polymost1ExtendedShaderProgram, POLYMOST_UNIFORM_PALSWAP_SAMPLER, 1);
+    rhi->uniform_set_texunit(polymost1ExtendedShaderProgram, POLYMOST_UNIFORM_PALETTE_SAMPLER, 2);
+    rhi->uniform_set_texunit(polymost1ExtendedShaderProgram, POLYMOST_UNIFORM_DETAIL_SAMPLER, 3);
+    rhi->uniform_set_texunit(polymost1ExtendedShaderProgram, POLYMOST_UNIFORM_GLOW_SAMPLER, 4);
+
+    polymost_setCurrentShaderProgram(polymost1BasicShaderProgram);
 
     lastbasepal = -1;
     for (int basepalnum = 0; basepalnum < MAXBASEPALS; ++basepalnum)
@@ -1207,8 +1368,16 @@ void polymost_glinit()
     for (int palookupnum = 0; palookupnum < MAXPALOOKUPS; ++palookupnum)
         uploadpalswap(palookupnum);
 
+    {
+        rhiSamplerCreateInfo info{};
+        info.max_anisotropy = 1.f;
+        tempSampler = rhi->sampler_create(&info);
+    }
+
+#if 0
     glEnableClientState(GL_VERTEX_ARRAY);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+#endif
 
     polymost_resetState();
 
@@ -1996,7 +2165,7 @@ void uploadtextureindexed(rhiTexture rhitex, vec2_t offset, vec2_t siz, intptr_t
 
 void uploadbasepalette(int32_t basepalnum)
 {
-    if (!polymost1BasicShaderProgramID)
+    if (!polymost1BasicShaderProgram)
     {
         //POGO: if we haven't initialized properly yet, we shouldn't be uploading base palettes
         return;
@@ -2052,7 +2221,7 @@ void uploadbasepalette(int32_t basepalnum)
 
 void uploadpalswap(int32_t palookupnum)
 {
-    if (!polymost1BasicShaderProgramID)
+    if (!polymost1BasicShaderProgram)
     {
         //POGO: if we haven't initialized properly yet, we shouldn't be uploading palette swap tables
         return;
@@ -2896,8 +3065,7 @@ int32_t gloadtile_hi(int32_t dapic, int32_t dapalnum, int32_t facen, hicreplctyp
 #ifdef USE_GLEXT
 void polymost_setupdetailtexture(const int32_t texunit, const rhiTexture rhipic, const int32_t flags)
 {
-    buildgl_activeTexture(texunit);
-    rhi->texture_bind(rhipic);
+    rhi->texunit_bind(texunit, rhipic, tempSampler);
 #if 0
     buildgl_bindTexture(GL_TEXTURE_2D, glpic);
 
@@ -2909,14 +3077,13 @@ void polymost_setupdetailtexture(const int32_t texunit, const rhiTexture rhipic,
     else buildgl_bindSamplerObject(texunit - GL_TEXTURE0, flags);
 #endif
 
-    glClientActiveTexture(texunit);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    //glClientActiveTexture(texunit);
+    //glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 
 void polymost_setupglowtexture(const int32_t texunit, const rhiTexture rhipic, const int32_t flags)
 {
-    buildgl_activeTexture(texunit);
-    rhi->texture_bind(rhipic);
+    rhi->texunit_bind(texunit, rhipic, tempSampler);
 #if 0
     buildgl_bindTexture(GL_TEXTURE_2D, glpic);
 
@@ -2928,8 +3095,8 @@ void polymost_setupglowtexture(const int32_t texunit, const rhiTexture rhipic, c
     else buildgl_bindSamplerObject(texunit - GL_TEXTURE0, flags);
 #endif
 
-    glClientActiveTexture(texunit);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    //glClientActiveTexture(texunit);
+    //glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 }
 #endif
 
@@ -3200,11 +3367,9 @@ void polymost_updatePalette()
     //POGO: only bind the base pal once when it's swapped
     if (curbasepal != lastbasepal)
     {
-        buildgl_activeTexture(GL_TEXTURE2);
-        rhi->texture_bind(paletteTextureIDs[curbasepal]);
+        rhi->texunit_bind(2, paletteTextureIDs[curbasepal], tempSampler);
         //buildgl_bindTexture(GL_TEXTURE_2D, paletteTextureIDs[curbasepal]);
         lastbasepal = curbasepal;
-        buildgl_activeTexture(GL_TEXTURE0);
     }
 }
 
@@ -3267,50 +3432,44 @@ static void polymost_waitForSubBuffer(uint32_t subBufferIndex)
 
 static void polymost_updaterotmat(void)
 {
-    if (gl.currentShaderProgramID == polymost1CurrentShaderProgramID)
-    {
-        float matrix[16] = {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-            0.f, 0.f, 0.f, 1.f,
-        };
+    float matrix[16] = {
+        1.f, 0.f, 0.f, 0.f,
+        0.f, 1.f, 0.f, 0.f,
+        0.f, 0.f, 1.f, 0.f,
+        0.f, 0.f, 0.f, 1.f,
+    };
 #if !SOFTROTMAT
-        //Up/down rotation
-        float udmatrix[16] = {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, gchang, -gshang*gvrcorrection, 0.f,
-            0.f, gshang/gvrcorrection, gchang, 0.f,
-            0.f, 0.f, 0.f, 1.f,
-        };
-        // Tilt rotation
-        float tiltmatrix[16] = {
-            gctang, -gstang, 0.f, 0.f,
-            gstang, gctang, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-            0.f, 0.f, 0.f, 1.f,
-        };
-        multiplyMatrix4f(matrix, udmatrix);
-        multiplyMatrix4f(matrix, tiltmatrix);
+    //Up/down rotation
+    float udmatrix[16] = {
+        1.f, 0.f, 0.f, 0.f,
+        0.f, gchang, -gshang*gvrcorrection, 0.f,
+        0.f, gshang/gvrcorrection, gchang, 0.f,
+        0.f, 0.f, 0.f, 1.f,
+    };
+    // Tilt rotation
+    float tiltmatrix[16] = {
+        gctang, -gstang, 0.f, 0.f,
+        gstang, gctang, 0.f, 0.f,
+        0.f, 0.f, 1.f, 0.f,
+        0.f, 0.f, 0.f, 1.f,
+    };
+    multiplyMatrix4f(matrix, udmatrix);
+    multiplyMatrix4f(matrix, tiltmatrix);
 #endif
-        Bmemcpy(polymost1RotMatrix, matrix, sizeof(matrix));
-        glUniformMatrix4fv(polymost1RotMatrixLoc, 1, false, polymost1RotMatrix);
-    }
+    Bmemcpy(polymost1RotMatrix, matrix, sizeof(matrix));
+    rhi->uniform_set_matrix(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_ROTMATRIX, polymost1RotMatrix);
 }
 
 static void polymost_identityrotmat(void)
 {
-    if (gl.currentShaderProgramID == polymost1CurrentShaderProgramID)
-    {
-        float matrix[16] = {
-            1.f, 0.f, 0.f, 0.f,
-            0.f, 1.f, 0.f, 0.f,
-            0.f, 0.f, 1.f, 0.f,
-            0.f, 0.f, 0.f, 1.f,
-        };
-        Bmemcpy(polymost1RotMatrix, matrix, sizeof(matrix));
-        glUniformMatrix4fv(polymost1RotMatrixLoc, 1, false, polymost1RotMatrix);
-    }
+    float matrix[16] = {
+        1.f, 0.f, 0.f, 0.f,
+        0.f, 1.f, 0.f, 0.f,
+        0.f, 0.f, 1.f, 0.f,
+        0.f, 0.f, 0.f, 1.f,
+    };
+    Bmemcpy(polymost1RotMatrix, matrix, sizeof(matrix));
+    rhi->uniform_set_matrix(polymost1CurrentShaderProgram, POLYMOST_UNIFORM_ROTMATRIX, polymost1RotMatrix);
 }
 
 static void polymost_polyeditorfunc(vec2f_t const * const dpxy, int n)
@@ -3558,19 +3717,16 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
     // texture scale by parkar request
     if (pth->hicr && !drawingskybox && ((pth->hicr->scale.x != 1.0f) || (pth->hicr->scale.y != 1.0f)))
     {
-        glMatrixMode(GL_TEXTURE);
-        glLoadIdentity();
-        glScalef(pth->hicr->scale.x, pth->hicr->scale.y, 1.0f);
-        glMatrixMode(GL_MODELVIEW);
+        rhi->texunit_setscale(0, 0.f, 0.f, pth->hicr->scale.x, pth->hicr->scale.y);
     }
 
 #ifdef USE_GLEXT
-    int32_t texunits = GL_TEXTURE0;
+    //int32_t texunits = GL_TEXTURE0;
 
     if (videoGetRenderMode() == REND_POLYMOST)
     {
         polymost_updatePalette();
-        texunits += 4;
+        //texunits += 4;
     }
 
     // detail texture
@@ -3583,18 +3739,24 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
             detailpth->hicr && detailpth->hicr->palnum == DETAILPAL)
         {
             polymost_useDetailMapping(true);
-            int const unit = videoGetRenderMode() == REND_POLYMOST ? GL_TEXTURE3 : ++texunits;
+//            int const unit = videoGetRenderMode() == REND_POLYMOST ? GL_TEXTURE3 : ++texunits;
+            int const unit = 3;
             polymost_setupdetailtexture(unit, detailpth->rhipic, detailpth->flags);
-            glMatrixMode(GL_TEXTURE);
-            glLoadIdentity();
+
+            float sx = 1.f, sy = 1.f;
 
             if (pth->hicr && ((pth->hicr->scale.x != 1.0f) || (pth->hicr->scale.y != 1.0f)))
-                glScalef(pth->hicr->scale.x, pth->hicr->scale.y, 1.0f);
+            {
+                sx = pth->hicr->scale.x;
+                sy = pth->hicr->scale.y;
+            }
 
             if ((detailpth->hicr->scale.x != 1.0f) || (detailpth->hicr->scale.y != 1.0f))
-                glScalef(detailpth->hicr->scale.x, detailpth->hicr->scale.y, 1.0f);
-
-            glMatrixMode(GL_MODELVIEW);
+            {
+                sx *= detailpth->hicr->scale.x;
+                sy *= detailpth->hicr->scale.y;
+            }
+            rhi->texunit_setscale(0, 0.f, 0.f, sx, sy);
         }
     }
 
@@ -3608,12 +3770,13 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
             glowpth->hicr && (glowpth->hicr->palnum == GLOWPAL))
         {
             polymost_useGlowMapping(true);
-            int const unit = videoGetRenderMode() == REND_POLYMOST ? GL_TEXTURE4 : ++texunits;
+            //int const unit = videoGetRenderMode() == REND_POLYMOST ? GL_TEXTURE4 : ++texunits;
+            int const unit = 4;
             polymost_setupglowtexture(unit, glowpth->rhipic, glowpth->flags);
         }
     }
 
-    buildgl_activeTexture(GL_TEXTURE0);
+    // buildgl_activeTexture(GL_TEXTURE0);
 
     if (glinfo.texnpot && r_npotwallmode == 2 && (method & DAMETH_WALL) != 0 && !(picanm[globalpicnum].tileflags & TILEFLAGS_TRUENPOT))
     {
@@ -3842,6 +4005,7 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
 
     if (videoGetRenderMode() != REND_POLYMOST)
     {
+#if 0
 #ifdef USE_GLEXT
         while (texunits > GL_TEXTURE0)
         {
@@ -3858,6 +4022,9 @@ static void polymost_drawpoly(vec2f_t const* const dpxy, int32_t const n, int32_
             --texunits;
         }
 #endif
+#endif
+        rhi->texunit_unbind(3);
+        rhi->texunit_unbind(4);
 
         if (!waloff[globalpicnum])
             glColorMask(true, true, true, true);

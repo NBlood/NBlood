@@ -29,8 +29,8 @@ struct PerDrawPaletted
 
 struct PerDrawExtended
 {
-    mat4 detailMatrix;
-    mat4 glowMatrix;
+    float2 detailScale;
+    float2 glowScale;
     uint detailId;
     uint glowId;
     bool useDetailMapping;
