@@ -2036,7 +2036,7 @@ void SetupVideoModeMenu(CGameMenuItemChain *pItem)
             break;
         }
     }
-    const int kMaxFps = r_maxfps == -1 ? refreshfreq : r_maxfps;
+    const int kMaxFps = r_maxfps == -1 ? round(refreshfreq) : r_maxfps;
     for (int i = 0; i < 8; i++)
     {
         if (kMaxFps == nFrameLimitValues[i])
