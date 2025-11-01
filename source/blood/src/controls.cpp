@@ -542,7 +542,7 @@ void ctrlGetInput(void)
 
     if (!gViewMap.bFollowMode && gViewMode == 4)
     {
-        const int nForward = gMouseAim ? input.forward : clamp(input.forward, -2048, 2048);
+        const int nForward = gMouseAim ? input.forward : clamp(-info.mousey, -2048, 2048);
         const int nStrafe = input.strafe;
         const int nSpeed = ClipLow((4096-gZoom)>>6, 16);
         gViewMap.turn += input.q16turn<<2;
