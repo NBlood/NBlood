@@ -542,9 +542,12 @@ void ctrlGetInput(void)
 
     if (!gViewMap.bFollowMode && gViewMode == 4)
     {
+        const int nForward = gMouseAim ? input.forward : clamp(input.forward, -2048, 2048);
+        const int nStrafe = input.strafe;
+        const int nSpeed = ClipLow((4096-gZoom)>>6, 16);
         gViewMap.turn += input.q16turn<<2;
-        gViewMap.forward += gMouseAim ? input.forward : clamp(fix16_sadd(input.forward, fix16_sdiv(fix16_from_int(-info.mousey), F16(8192))), -2048, 2048);
-        gViewMap.strafe += input.strafe;
+        gViewMap.forward += gMouseAim ? int(scaleAdjustmentToInterval(nForward))*nSpeed : nForward;
+        gViewMap.strafe += int(scaleAdjustmentToInterval(nStrafe))*nSpeed;
         input.q16turn = 0;
         input.forward = 0;
         input.strafe = 0;
