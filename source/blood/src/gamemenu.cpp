@@ -2584,6 +2584,45 @@ bool CGameMenuItemZCycleSelect::Event(CGameMenuEvent &event)
         if (m_nTopDelta+1 < m_nRows)
             m_nTopDelta++;
         return false;
+    case kMenuEventTop:
+        if (event.at2 == sc_Tab || m_nFocus == 0)
+        {
+            pMenu->FocusPrevItem();
+            return false;
+        }
+        if (m_nTopDelta == 0)
+        {
+            m_nFocus -= 16;
+            if (m_nFocus < 0)
+                m_nFocus = 0;
+            return false;
+        }
+        for (int i = m_nTopDelta; i > 0 && m_nFocus > 0; i--)
+        {
+            m_nFocus--;
+            if (m_nTopDelta > 0)
+                m_nTopDelta--;
+        }
+        return false;
+    case kMenuEventBottom:
+        if (event.at2 == sc_Tab || m_nFocus == m_nItems-1)
+        {
+            pMenu->FocusNextItem();
+            return false;
+        }
+        if (m_nTopDelta+1 >= m_nRows)
+        {
+            m_nFocus += 16;
+            if (m_nFocus >= m_nItems)
+                m_nFocus = m_nItems-1;
+            return false;
+        }
+        while (m_nTopDelta +1 < m_nRows)
+        {
+            m_nFocus++;
+            m_nTopDelta++;
+        }
+        return false;
     case kMenuEventEnter:
         if (m_pCallback)
             m_pCallback(this);
