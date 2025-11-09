@@ -37,6 +37,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "tile.h"
 #include "trig.h"
 #include "view.h"
+#include "warp.h"
 
 CFX gFX;
 
@@ -320,9 +321,21 @@ void fxSpawnEjectingBrass(spritetype *pSprite, int z, int a3, int a4)
 {
     int x = pSprite->x+mulscale28(pSprite->clipdist-4, Cos(pSprite->ang));
     int y = pSprite->y+mulscale28(pSprite->clipdist-4, Sin(pSprite->ang));
+    int nSector = pSprite->sectnum;
     x += mulscale30(a3, Cos(pSprite->ang+512));
     y += mulscale30(a3, Sin(pSprite->ang+512));
-    spritetype *pBrass = gFX.fxSpawn((FX_ID)(FX_37+Random(3)), pSprite->sectnum, x, y, z);
+    if (!VanillaMode()) // fix weird edge case when spawning casings over ror
+    {
+        int cX = x, cY = y, cZ = z, nSector2 = nSector;
+        if (CheckLink(&cX, &cY, &cZ, &nSector2)) // if casing spawn position is overlapping into ror sector, move origin to ror sector
+        {
+            x = cX;
+            y = cY;
+            z = cZ;
+            nSector = nSector2;
+        }
+    }
+    spritetype *pBrass = gFX.fxSpawn((FX_ID)(FX_37+Random(3)), nSector, x, y, z);
     if (pBrass)
     {
         if (!VanillaMode())
@@ -339,9 +352,21 @@ void fxSpawnEjectingShell(spritetype *pSprite, int z, int a3, int a4)
 {
     int x = pSprite->x+mulscale28(pSprite->clipdist-4, Cos(pSprite->ang));
     int y = pSprite->y+mulscale28(pSprite->clipdist-4, Sin(pSprite->ang));
+    int nSector = pSprite->sectnum;
     x += mulscale30(a3, Cos(pSprite->ang+512));
     y += mulscale30(a3, Sin(pSprite->ang+512));
-    spritetype *pShell = gFX.fxSpawn((FX_ID)(FX_40+Random(3)), pSprite->sectnum, x, y, z);
+    if (!VanillaMode()) // fix weird edge case when spawning casings over ror
+    {
+        int cX = x, cY = y, cZ = z, nSector2 = nSector;
+        if (CheckLink(&cX, &cY, &cZ, &nSector2)) // if casing spawn position is overlapping into ror sector, move origin to ror sector
+        {
+            x = cX;
+            y = cY;
+            z = cZ;
+            nSector = nSector2;
+        }
+    }
+    spritetype *pShell = gFX.fxSpawn((FX_ID)(FX_40+Random(3)), nSector, x, y, z);
     if (pShell)
     {
         if (!VanillaMode())
