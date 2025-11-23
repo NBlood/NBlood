@@ -292,10 +292,10 @@ else ifeq ($(PLATFORM),$(filter $(PLATFORM),DINGOO GCW))
     IMPLICIT_ARCH := mipsel
 else
     ifneq ($(ARCH),)
-        override ARCH := $(subst i486,i386,$(subst i586,i386,$(subst i686,i386,$(strip $(ARCH)))))
+        override ARCH := $(subst i486,i386,$(subst i586,i386,$(subst i686,i386,$(subst aarch64,arm64,$(strip $(ARCH))))))
         IMPLICIT_ARCH := $(ARCH)
     else
-        IMPLICIT_ARCH := $(subst i486,i386,$(subst i586,i386,$(subst i686,i386,$(strip $(shell uname -m)))))
+        IMPLICIT_ARCH := $(subst i486,i386,$(subst i586,i386,$(subst i686,i386,$(subst aarch64,arm64,$(strip $(shell uname -m))))))
     endif
 
     ifeq ($(findstring x86_64,$(IMPLICIT_ARCH)),x86_64)
@@ -515,12 +515,23 @@ else ifeq ($(PLATFORM),DARWIN)
         ifneq ($(findstring -arch,$(ARCH)),-arch)
             override ARCH := -arch $(ARCH)
         endif
+    else
+        # Auto-detect and set architecture for macOS
+        ifeq ($(findstring arm64,$(IMPLICIT_ARCH)),arm64)
+            override ARCH := -arch arm64
+        else ifeq ($(findstring aarch64,$(IMPLICIT_ARCH)),aarch64)
+            override ARCH := -arch arm64
+        else ifeq ($(findstring x86_64,$(IMPLICIT_ARCH)),x86_64)
+            override ARCH := -arch x86_64
+        endif
     endif
     COMMONFLAGS += $(ARCH)
 
     ifneq ($(findstring x86_64,$(IMPLICIT_ARCH)),x86_64)
         ifneq ($(findstring arm64,$(IMPLICIT_ARCH)),arm64)
-            LINKERFLAGS += -read_only_relocs suppress
+            ifneq ($(findstring aarch64,$(IMPLICIT_ARCH)),aarch64)
+                LINKERFLAGS += -read_only_relocs suppress
+            endif
         endif
     endif
 
@@ -581,6 +592,25 @@ ifndef OPTOPT
             ifneq (0,$(USE_SSE2))
                 OPTOPT += -msse2
             endif
+        endif
+    endif
+    # Apple Silicon (ARM64) optimization flags
+    ifeq ($(findstring arm64, $(IMPLICIT_ARCH)),arm64)
+        ifeq ($(PLATFORM),DARWIN)
+            # Optimize for Apple Silicon (M1/M2/M3/M4)
+            # Use ARMv8.5-A with standard extensions available on all Apple Silicon chips
+            OPTOPT := -mcpu=apple-a14 -mtune=native
+        else
+            # Generic ARM64 optimizations for non-Apple ARM platforms
+            OPTOPT := -march=armv8-a+fp+simd
+        endif
+    endif
+    ifeq ($(findstring aarch64, $(IMPLICIT_ARCH)),aarch64)
+        # Alternative ARM64 detection (aarch64)
+        ifeq ($(PLATFORM),DARWIN)
+            OPTOPT := -mcpu=apple-a14 -mtune=native
+        else
+            OPTOPT := -march=armv8-a+fp+simd
         endif
     endif
     ifeq ($(PLATFORM),WII)

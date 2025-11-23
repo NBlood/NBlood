@@ -88,6 +88,20 @@ A port of several BUILD Engine games derived from the Duke Nukem 3D codebase, ba
 3. Launch Rednukem
 
 ## Building from source
+
+### macOS (including Apple Silicon)
+See [BUILD_MACOS.md](BUILD_MACOS.md) for detailed macOS build instructions, including:
+- Native Apple Silicon (ARM64) support for M1/M2/M3/M4 chips
+- Automated build script for macOS
+- Dependency installation via Homebrew
+- macOS Sequoia (15.x) compatibility
+
+Quick start on macOS:
+```bash
+./build_macos_arm.sh
+```
+
+### Other Platforms
 See: https://wiki.eduke32.com/wiki/Main_Page
 
 ## Acknowledgments
