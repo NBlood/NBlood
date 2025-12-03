@@ -135,6 +135,8 @@ bool CKillMgr::AllowedType(spritetype *pSprite)
         return false;
     if (pSprite->statnum != kStatDude)
         return false;
+    if (pSprite->type == kDudeGargoyleStatueFlesh || pSprite->type == kDudeGargoyleStatueStone) // if statue gargoyle, do not count as enemy until they activate
+        return VanillaMode();
     return pSprite->type != kDudeBat && pSprite->type != kDudeRat && pSprite->type != kDudeInnocent && pSprite->type != kDudeBurningInnocent;
 }
 

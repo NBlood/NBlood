@@ -48,6 +48,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "blood.h"
 #include "db.h"
 #include "dude.h"
+#include "endgame.h"
 #include "eventq.h"
 #include "fx.h"
 #include "gameutil.h"
@@ -655,7 +656,8 @@ void aiActivateDude(spritetype *pSprite, XSPRITE *pXSprite)
     }
     case kDudeGargoyleStatueFlesh:
     case kDudeGargoyleStatueStone:
-        
+        if (!VanillaMode()) // stone activated, add to total count
+            gKillMgr.AddCount(1);
         #ifdef NOONE_EXTENSIONS
         // play gargoyle statue breaking animation if data1 = 1.
         if (gModernMap && pXSprite->data1 == 1) {
