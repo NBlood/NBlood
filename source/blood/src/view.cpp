@@ -1790,14 +1790,11 @@ void UpdateStatusBar(ClockTicks arg)
     }
     if (gViewSize == 2 || gViewSize == 3)
     {
-        const char bKeyHolder = (gViewSize == 3); // if hud size 3, use custom key holder attached to health/ammo hud tile
-        DrawStatSprite(2201, 34, 187, 16, nPalette, 256);
+        const char bKeyHolder = gViewSize == 3; // if hud size 3, use custom key holder attached to health/ammo hud tile
         if (bKeyHolder)
-        {
-            static int nKeyHolderX = tilesiz[2201].x;
-            static int nKeyHolderY = 187-(tilesiz[kSBarKeyHolderAlt].y>>1);
-            DrawStatSprite(kSBarKeyHolderAlt, nKeyHolderX, nKeyHolderY, 16, nPalette, 256|RS_TOPLEFT);
-        }
+            DrawStatSprite(kSBarKeyHolderAlt, 52, 187, 16, nPalette, 256);
+        else
+            DrawStatSprite(2201, 34, 187, 16, nPalette, 256);
         if (pXSprite->health >= 16 || ((int)totalclock&16) || pXSprite->health == 0)
         {
             DrawStatNumber("%3d", pXSprite->health>>4, 2190, 8, 183, 0, 0, 256);
