@@ -185,6 +185,8 @@ void CONTROL_MapKey( int32_t which, kb_scancode key1, kb_scancode key2 );
 void CONTROL_MapButton(int whichfunction, int whichbutton, int doubleclicked, controldevice device);
 void CONTROL_DefineFlag( int which, int toggle );
 void CONTROL_ClearAssignments( void );
+bool CONTROL_GetControllerAxisIsTwinAxisStick(int32_t whichaxis);
+void CONTROL_GetAxisHeatMap( int32_t nAxis, uint8_t *tilePtr, int32_t nWidth, int32_t nHeight, int32_t nPalBase, int32_t nPalRange, bool bDithering = false );
 // void CONTROL_GetFunctionInput( void );
 void CONTROL_GetInput( ControlInfo *info );
 void CONTROL_ClearButton( int whichbutton );
