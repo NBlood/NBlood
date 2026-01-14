@@ -39,6 +39,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "screen.h"
 #include "sound.h"
 #include "view.h"
+#ifdef _WIN32 // required for MME midi device selection
+#include "driver_winmm.h"
+#include "midi.h"
+#endif
 
 void SaveGame(CGameMenuItemZEditBitmap *, CGameMenuEvent *);
 
@@ -638,6 +642,9 @@ void UpdateMusicVolume(CGameMenuItemSlider *pItem);
 void UpdateSoundRate(CGameMenuItemZCycle *pItem);
 void UpdateNumVoices(CGameMenuItemSlider *pItem);
 void UpdateMusicDevice(CGameMenuItemZCycle *pItem);
+#ifdef _WIN32
+void UpdateMidiDevice(CGameMenuItemSlider *pItem);
+#endif
 void SetSound(CGameMenuItemChain *pItem);
 void PreDrawSound(CGameMenuItem *pItem);
 const char *pzSoundRateStrings[] = {
@@ -685,6 +692,9 @@ CGameMenuItemSlider itemOptionsSoundNumVoices("VOICES:", 3, 66, 120, 180, NumVoi
 CGameMenuItemZBool itemOptionsSoundCDToggle("REDBOOK AUDIO:", 3, 66, 130, 180, false, UpdateCDToggle, NULL, NULL);
 CGameMenuItemZCycle itemOptionsSoundMusicDevice("MIDI DRIVER:", 3, 66, 140, 180, 0, UpdateMusicDevice, pzMusicDeviceStrings, ARRAY_SIZE(pzMusicDeviceStrings), 0);
 CGameMenuItemChain itemOptionsSoundSF2Bank("SF2 BANK", 3, 66, 150, 180, 0, &menuOptionsSoundSF2, 0, NULL, 0);
+#ifdef _WIN32
+CGameMenuItemSlider itemOptionsSoundMIDIDevice("MIDI DEVICE:", 3, 66, 150, 180, 0, 0, 255, 1, UpdateMidiDevice, -1, -1, kMenuSliderValue);
+#endif
 CGameMenuItemChain itemOptionsSoundApplyChanges("APPLY CHANGES", 3, 66, 160, 180, 0, NULL, 0, SetSound, 0);
 
 
@@ -1423,6 +1433,10 @@ void SetupOptionsMenu(void)
     menuOptionsSound.Add(&itemOptionsSoundCDToggle, false);
     menuOptionsSound.Add(&itemOptionsSoundMusicDevice, false);
     menuOptionsSound.Add(&itemOptionsSoundSF2Bank, false);
+#ifdef _WIN32
+    if (WinMMDrv_MIDI_GetNumDevices() > 0) // do not add this item if only 1 midi device is detected
+        menuOptionsSound.Add(&itemOptionsSoundMIDIDevice, false);
+#endif
 
     menuOptionsSound.Add(&itemOptionsSoundApplyChanges, false);
     menuOptionsSound.Add(&itemBloodQAV, false);
@@ -2268,14 +2282,32 @@ void UpdateMusicDevice(CGameMenuItemZCycle *pItem)
     UNREFERENCED_PARAMETER(pItem);
     itemOptionsSoundSF2Bank.bEnable = 0;
     itemOptionsSoundSF2Bank.bNoDraw = 1;
+#ifdef _WIN32
+    itemOptionsSoundMIDIDevice.bEnable = 0;
+    itemOptionsSoundMIDIDevice.bNoDraw = 1;
+#endif
     switch (nMusicDeviceValues[itemOptionsSoundMusicDevice.m_nFocus])
     {
     case ASS_SF2:
         itemOptionsSoundSF2Bank.bEnable = 1;
         itemOptionsSoundSF2Bank.bNoDraw = 0;
         break;
+#ifdef _WIN32
+    case ASS_WinMM:
+        itemOptionsSoundMIDIDevice.bEnable = 1;
+        itemOptionsSoundMIDIDevice.bNoDraw = 0;
+        break;
+#endif
     }
 }
+
+#ifdef _WIN32
+void UpdateMidiDevice(CGameMenuItemSlider *pItem)
+{
+    WinMM_DeviceID = (unsigned int)pItem->nValue-1;
+    MIDI_Restart();
+}
+#endif
 
 void SetSound(CGameMenuItemChain *pItem)
 {
@@ -2325,6 +2357,10 @@ void SetupOptionsSound(CGameMenuItemChain *pItem)
             break;
         }
     }
+#ifdef _WIN32
+    itemOptionsSoundMIDIDevice.nValue = int(WinMM_DeviceID+1);
+    itemOptionsSoundMIDIDevice.nRangeHigh = WinMMDrv_MIDI_GetNumDevices();
+#endif
 
     UpdateMusicDevice(NULL);
 }
