@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdio.h>
 #include "build.h"
 #include "compat.h"
+#include "crc32.h"
 #include "lz4.h"
 #include "mmulti.h"
 #include "common_game.h"
@@ -338,6 +339,10 @@ void MyLoadSave::Load(void)
     Read(&version, sizeof(version));
     if (version != BYTEVERSION)
         ThrowError("Incompatible version of saved game found!");
+    uint32_t uINICRC;
+    Read(&uINICRC, sizeof(uINICRC));
+    if (uINICRC != Bcrc32(pINISelected->zName, (unsigned int)BMAX_PATH, 0))
+        ThrowError("Not using the same INI as saved game!");
     Read(&gGameOptions, sizeof(gGameOptions));
     Read(&numsectors, sizeof(numsectors));
     Read(&numwalls, sizeof(numwalls));
@@ -456,6 +461,8 @@ void MyLoadSave::Save(void)
     Write(&id, sizeof(id));
     short version = BYTEVERSION;
     Write(&version, sizeof(version));
+    uint32_t uINICRC = Bcrc32(pINISelected->zName, (unsigned int)BMAX_PATH, 0);
+    Write(&uINICRC, sizeof(uINICRC));
     for (int nSprite = 0; nSprite < kMaxSprites; nSprite++)
     {
         if (sprite[nSprite].statnum < kMaxStatus && nSprite > nNumSprites)
@@ -565,6 +572,7 @@ void LoadSavedInfo(void)
     int nCount = 0;
     for (auto pIterator = pList; pIterator != NULL && nCount < 10; pIterator = pIterator->next, nCount++)
     {
+        uint32_t uINICRC = 0;
         int hFile = kopen4loadfrommod(pIterator->name, 0);
         if (hFile == -1)
             ThrowError("Error loading save file header.");
@@ -582,6 +590,12 @@ void LoadSavedInfo(void)
         }
         kread(hFile, &version, sizeof(version));
         if (version != BYTEVERSION)
+        {
+            kclose(hFile);
+            continue;
+        }
+        kread(hFile, &uINICRC, sizeof(uINICRC));
+        if (uINICRC != Bcrc32(pINISelected->zName, (unsigned int)BMAX_PATH, 0))
         {
             kclose(hFile);
             continue;
