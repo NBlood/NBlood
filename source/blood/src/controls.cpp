@@ -88,6 +88,7 @@ void ctrlInit(void)
     CONTROL_DefineFlag(gamefunc_Strafe_Right, false);
     CONTROL_DefineFlag(gamefunc_Jump, false);
     CONTROL_DefineFlag(gamefunc_Crouch, false);
+    CONTROL_DefineFlag(gamefunc_Crouch_Toggle, false);
     CONTROL_DefineFlag(gamefunc_Run, false);
     CONTROL_DefineFlag(gamefunc_AutoRun, false);
     CONTROL_DefineFlag(gamefunc_Open, false);
