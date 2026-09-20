@@ -343,28 +343,37 @@ static const char * joystickanalogdefaults[MAXJOYAXES] =
 
 static const int32_t joystickanalogscaledefaults[MAXJOYAXES] =
    {
-   DEFAULTJOYSTICKANALOGUESCALE/2,
    DEFAULTJOYSTICKANALOGUESCALE,
-   DEFAULTJOYSTICKANALOGUESCALE/3*2,
-   DEFAULTJOYSTICKANALOGUESCALE/4,
+   DEFAULTJOYSTICKANALOGUESCALE,
+   DEFAULTJOYSTICKANALOGUESCALE,
+   DEFAULTJOYSTICKANALOGUESCALE/10*4,
    };
 
 
 static const int32_t joystickanalogdeaddefaults[MAXJOYAXES] =
    {
-   DEFAULTJOYSTICKANALOGUEDEAD*5,
-   DEFAULTJOYSTICKANALOGUEDEAD*4,
-   DEFAULTJOYSTICKANALOGUEDEAD*2,
-   DEFAULTJOYSTICKANALOGUEDEAD*2,
+   fix16_from_float(0.2f),
+   fix16_from_float(0.15f),
+   fix16_from_float(0.15f),
+   fix16_from_float(0.15f),
+   };
+
+
+static const int32_t joystickanalogsnapzone[MAXJOYAXES] =
+   {
+   fix16_from_float(0.1f),
+   fix16_from_float(0.1f),
+   fix16_from_float(0.4f),
+   fix16_from_float(0.1f),
    };
 
 
 static const int32_t joystickanalogsaturatedefaults[MAXJOYAXES] =
    {
-   DEFAULTJOYSTICKANALOGUESATURATE*3,
-   DEFAULTJOYSTICKANALOGUESATURATE*3,
-   DEFAULTJOYSTICKANALOGUESATURATE*2,
-   DEFAULTJOYSTICKANALOGUESATURATE*2,
+   fix16_from_float(0.175f),
+   fix16_from_float(0.25f),
+   fix16_from_float(0.125f),
+   fix16_from_float(0.125f),
    };
 
 
