@@ -34,7 +34,7 @@ jobs:
           cp pcexhumed.pk3 template/pcexhumed/
 
       - uses: >-
-          dawidd6/action-download-artifact@d63b86af1b34672e53c440b1b83979861906bad7
+          dawidd6/action-download-artifact@27e4ae67c24b67d3b54bc6d6a45475be1e28031b
         with:
           workflow: build.yml
           workflow_conclusion: success
