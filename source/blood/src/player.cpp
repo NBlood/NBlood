@@ -957,7 +957,7 @@ void playerStart(int nPlayer, int bNewLevel)
     pPlayer->weaponState = 0;
     pPlayer->weaponQav = -1;
     #ifdef NOONE_EXTENSIONS
-    playerQavSceneReset(pPlayer); // reset qav scene
+    nnExtPlayerReset(pPlayer);
     
     // assign or update player's sprite index for conditions
     if (gModernMap)
@@ -1042,7 +1042,7 @@ void playerReset(PLAYER *pPlayer)
         pPlayer->packSlots[i].curAmount = 0;
     }
     #ifdef NOONE_EXTENSIONS
-    playerQavSceneReset(pPlayer);
+    nnExtPlayerReset(pPlayer);
     #endif
     // reset posture (mainly required for resetting movement speed and jump height)
     playerResetPosture(pPlayer);
@@ -1570,6 +1570,22 @@ void ProcessInput(PLAYER *pPlayer)
     POSTURE *pPosture = &pPlayer->pPosture[pPlayer->lifeMode][pPlayer->posture];
     GINPUT *pInput = &pPlayer->input;
 
+#ifdef NOONE_EXTENSIONS
+    if (gModernMap)
+    {
+        if (pXSprite->sysData1 & kInputProcessNone)
+        {
+            char action = pInput->keyFlags.action;
+            Bmemset(pInput, 0, sizeof(GINPUT));
+            pPlayer->restTime = 0; // mute player songs
+
+
+            if (pXSprite->health == 0)
+                pInput->keyFlags.action = action; // allow to restart
+        }
+    }
+#endif
+
     if (pPlayer == gMe && numplayers == 1)
     {
         gViewAngleAdjust = 0.f;
@@ -2065,6 +2081,12 @@ void playerProcess(PLAYER *pPlayer)
         if (packItemActive(pPlayer, kPackDivingSuit))
             packUseItem(pPlayer, kPackDivingSuit);
     }
+
+#ifdef NOONE_EXTENSIONS
+    if (gModernMap && pXSprite->aiState)
+        return; // AI state have it's own seq
+#endif
+
     int nType = kDudePlayer1-kDudeBase;
     switch (pPlayer->posture)
     {

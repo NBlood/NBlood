@@ -61,7 +61,7 @@ static void aiPatrolMove(spritetype* pSpr, XSPRITE* pXSpr);
 static void aiPatrolAlarm(spritetype* pSpr, XSPRITE* pXSpr, spritetype* pTarg);
 static void aiPatrolRandGoalAng(spritetype* pSpr, XSPRITE* pXSpr);
 static void aiPatrolSetDirection(spritetype* pSpr, XSPRITE* pXSpr, int nAng);
-static void aiPatrolSetupCrouchFlag(spritetype* pSpr, XSPRITE* pXSpr, int nMask);
+static char aiPatrolSetupCrouchFlag(spritetype* pSpr, XSPRITE* pXSpr, int nMask);
 
 static int  markerFindNext(XSPRITE* pXMark, char back);
 static char markerIsNode(XSPRITE* pXMark, char back);
@@ -86,11 +86,23 @@ static void aiPatrolThink(spritetype* pSpr, XSPRITE* pXSpr)
     if (!dudeIsAlive(pSpr))
         return;
 
-    spritetype* pMark; XSPRITE* pXMark; DUDEEXTRA_STATS* pStats;
+    spritetype* pMark; XSPRITE* pXMark; DUDEEXTRA_STATS* pStats; PLAYER* pPlay = NULL;
     int32_t nTarg = -1, nDist, nWTime, nState, nAng, vAng, x, y;
     char itMovesBack;
 
-    if ((nTarg = aiPatrolThinkTarget(pSpr, pXSpr)) >= 0)
+    // This is indicator for calling aiPatrolSetDirection().
+    // The function has been placed in movement
+    // processing for smooth camera
+    // rotation.
+    //
+    pXSpr->targetY = 0; // do not call
+
+    if (IsPlayerSprite(pSpr))
+    {
+        if ((pPlay = getPlayerById(pSpr->type)) != NULL)
+            pPlay->restTime = 0; // mute songs
+    }
+    else if ((nTarg = aiPatrolThinkTarget(pSpr, pXSpr)) >= 0)
     {
         aiPatrolStop(pSpr, nTarg, pXSpr->dudeAmbush);
         return;
@@ -254,7 +266,8 @@ static void aiPatrolThink(spritetype* pSpr, XSPRITE* pXSpr)
                 }
             }
 
-            aiPatrolSetupCrouchFlag(pSpr, pXSpr, pMark->flags & kModernTypeFlag3);
+            if (aiPatrolSetupCrouchFlag(pSpr, pXSpr, pMark->flags & kModernTypeFlag3))
+                aiPatrolState(pSpr, pXSpr, kAiStatePatrolMove); // seq must be updated
 
             if (!aiPatrolSetMarker(pSpr, pXSpr))
             {
@@ -263,10 +276,9 @@ static void aiPatrolThink(spritetype* pSpr, XSPRITE* pXSpr)
             }
         }
     }
-
-    pMark = &sprite[pXSpr->target];
-    nAng = getangle(pMark->x - pSpr->x, pMark->y - pSpr->y);
-    aiPatrolSetDirection(pSpr, pXSpr, nAng);
+    
+    // call aiPatrolSetDirection() to set goalAng
+    pXSpr->targetY = 1;
 }
 //-------------------------------------------------------------------------
 static int aiPatrolThinkTarget(spritetype* pSpr, XSPRITE* pXSpr)
@@ -346,7 +358,7 @@ static int aiPatrolThinkTarget(spritetype* pSpr, XSPRITE* pXSpr)
     {
         PLAYER* pPlay = &gPlayer[i];
         spritetype* pTarg = pPlay->pSprite;
-        if (!xsprIsFine(pTarg))
+        if (!xsprIsFine(pTarg) || pTarg->index == pSpr->index)
             continue;
 
         XSPRITE* pXTarg = &xsprite[pTarg->extra];
@@ -600,44 +612,56 @@ static void aiPatrolMove(spritetype* pSpr, XSPRITE* pXSpr)
         return;
 
     CUSTOMDUDE* pDude; spritetype* pTarg; XSPRITE* pXTarg;
-    int32_t nAng, gAng, nFrontSpeed, nTurnSpeed, nPosture;
+    int32_t nAng, gAng, nFrontSpeed, nTurnSpeed;
     int32_t nVel, dx, dy;
 
     char guardMode, isFlying;
     DUDEINFO_EXTRA* pExtra = &gDudeInfoExtra[pSpr->type - kDudeBase];
     DUDEINFO* pInfo = &dudeInfo[pSpr->type - kDudeBase];
+    PLAYER* pPlay = NULL; POSTURE* pPosture;
+
+    if (IsPlayerSprite(pSpr))
+        pPlay = getPlayerById(pSpr->type);
 
     switch (pSpr->type)
     {
         case kDudeModernCustom:
             pDude = cdudeGet(pSpr->index);
             isFlying = pDude->IsFlying();
-
-            if (spriteIsUnderwater(pSpr))                   nPosture = kCdudePostureW;
-            else if (pXSpr->unused4 & kDudeFlagCrouch)      nPosture = kCdudePostureC;
-            else if (isFlying)                              nPosture = kCdudePostureF;
-            else                                            nPosture = kCdudePostureL;
-
-            nFrontSpeed = pDude->GetVelocity(nPosture, kParVelocityForward);
-            nTurnSpeed  = pDude->GetVelocity(nPosture, kParVelocityTurn);
+            nFrontSpeed = pDude->GetVelocity(kParVelocityForward);
+            nTurnSpeed = pDude->GetVelocity(kParVelocityTurn);
             break;
         default:
-            isFlying    = pExtra->flying;
-            nFrontSpeed = pInfo->frontSpeed;
-            nTurnSpeed  = (pInfo->angSpeed << 2) >> 4;
+            if (pPlay)
+            {
+                pPosture = &pPlay->pPosture[pPlay->lifeMode][pPlay->posture];
+                isFlying = (pSpr->flags & kPhysGravity) == 0;
+                nFrontSpeed = pPosture->frontAccel << 3;
+                nTurnSpeed = nFrontSpeed >> 11;
+            }
+            else
+            {
+                isFlying = pExtra->flying;
+                nFrontSpeed = pInfo->frontSpeed;
+                nTurnSpeed = (pInfo->angSpeed << 2) >> 4;
+            }
 
             if (pXSpr->unused4 & kDudeFlagCrouch)
                 nFrontSpeed >>= 1, nTurnSpeed >>= 1;
 
             break;
     }
+    
+    pTarg = (spriRangeIsFine(pXSpr->target)) ? &sprite[pXSpr->target] : NULL;
+
+    if (pTarg && pXSpr->targetY == 1 && (pPlay || (gFrame & 2) == (pSpr->index & 2)))
+        aiPatrolSetDirection(pSpr, pXSpr, getangle(pTarg->x - pSpr->x, pTarg->y - pSpr->y));
 
     nAng = DANGLE(pXSpr->goalAng, pSpr->ang);
     pSpr->ang = (pSpr->ang + ClipRange(nAng, -nTurnSpeed, nTurnSpeed)) & kAngMask;
-    if (aiPatrolTurning(pXSpr->aiState) || !spriRangeIsFine(pXSpr->target))
+    if (aiPatrolTurning(pXSpr->aiState) || pTarg == NULL)
         return;
 
-    pTarg = &sprite[pXSpr->target];
     pXTarg = (xsprIsFine(pTarg)) ? &xsprite[pTarg->extra] : NULL;
 
     gAng = kAng60;
@@ -673,7 +697,7 @@ static void aiPatrolMove(spritetype* pSpr, XSPRITE* pXSpr)
     xvel[pSpr->index] += mulscale30(nFrontSpeed, Cos(pSpr->ang));
     yvel[pSpr->index] += mulscale30(nFrontSpeed, Sin(pSpr->ang));
 
-    if (!guardMode)
+    if (!guardMode && (pXTarg == NULL || pXTarg->wave != 1))
     {
         dx = (pTarg->x - pSpr->x);
         dy = (pTarg->y - pSpr->y);
@@ -706,6 +730,7 @@ static void aiPatrolEnterTurn(spritetype* pSpr, XSPRITE* pXSpr)
 void aiPatrolState(spritetype* pSpr, XSPRITE* pXSpr, int nState, unsigned int nTime)
 {
     DUDEINFO_EXTRA* pExtra; AISTATE *pState, *p; CUSTOMDUDE* pDude;
+    PLAYER* pPlay;
 
     int nSeq = -1;
     char uwater = spriteIsUnderwater(pSpr);
@@ -788,6 +813,20 @@ void aiPatrolState(spritetype* pSpr, XSPRITE* pXSpr, int nState, unsigned int nT
             fallthrough__;
         default:
             nSeq += getDudeInfo(pSpr->type)->seqStartID;
+            
+            if (IsPlayerSprite(pSpr) && (pPlay = getPlayerById(pSpr->type)) != NULL)
+            {
+                if (uwater)         pPlay->posture = kPostureSwim;
+                else if (crouch)    pPlay->posture = kPostureCrouch;
+                else                pPlay->posture = kPostureStand;
+
+                if (pPlay == gMe && !aiInPatrolState(pXSpr->aiState))
+                {
+                    gInput.keyFlags.lookCenter = 1;
+                    gInput.syncFlags.keyChange = 1;
+                }
+            }
+
             break;
     }
 
@@ -1005,23 +1044,32 @@ void aiPatrolStop(spritetype* pSpr, int nTarg, char alarm)
             pXSpr->target = -1;
         }
 
-        patrol = pXSpr->dudeFlag4, pXSpr->dudeFlag4 = 0;
-        if (spriRangeIsFine(nTarg) && IsDudeSprite(&sprite[nTarg]) && xspriRangeIsFine(sprite[nTarg].extra))
+        if (!IsPlayerSprite(pSpr))
         {
-            aiSetTarget(pXSpr, nTarg);
-            aiActivateDude(pSpr, pXSpr);
+            patrol = pXSpr->dudeFlag4, pXSpr->dudeFlag4 = 0;
+            if (spriRangeIsFine(nTarg) && IsDudeSprite(&sprite[nTarg]) && xspriRangeIsFine(sprite[nTarg].extra))
+            {
+                aiSetTarget(pXSpr, nTarg);
+                aiActivateDude(pSpr, pXSpr);
 
-            if (alarm)
-                aiPatrolAlarm(pSpr, pXSpr, &sprite[nTarg]);
+                if (alarm)
+                    aiPatrolAlarm(pSpr, pXSpr, &sprite[nTarg]);
+            }
+            else
+            {
+                pXSpr->target = pSpr->index;
+                aiInitSprite(pSpr);
+                aiSetTarget(pXSpr, pXSpr->targetX, pXSpr->targetY, pXSpr->targetZ);
+            }
+
+            pXSpr->dudeFlag4 = patrol; // this must be kept so enemy can patrol after respawn again
         }
         else
         {
-            pXSpr->target = pSpr->index;
-            aiInitSprite(pSpr);
-            aiSetTarget(pXSpr, pXSpr->targetX, pXSpr->targetY, pXSpr->targetZ);
+            pXSpr->dudeFlag4 = 0;
+            pXSpr->stateTimer = 0;
+            pXSpr->aiState = NULL;
         }
-
-        pXSpr->dudeFlag4 = patrol; // this must be kept so enemy can patrol after respawn again
     }
 }
 //-------------------------------------------------------------------------
@@ -1082,7 +1130,7 @@ void aiPatrolFlagsMgr(spritetype* pSrc, XSPRITE* pXSrc, spritetype* pDest, XSPRI
     }
 
     // do init
-    if (init && IsDudeSprite(pDest) && !IsPlayerSprite(pDest))
+    if (init && IsDudeSprite(pDest) /*&& !IsPlayerSprite(pDest)*/)
     {
         if (pXDest->dudeFlag4)
         {
@@ -1093,7 +1141,10 @@ void aiPatrolFlagsMgr(spritetype* pSrc, XSPRITE* pXSrc, spritetype* pDest, XSPRI
 
                 if (aiPatrolSetMarker(pDest, pXDest))
                 {
-                    aiPatrolState(pDest, pXDest, kAiStatePatrolIdle);
+                    if (aiPatrolMarkerReached(pDest, pXDest))
+                        aiPatrolState(pDest, pXDest, kAiStatePatrolIdle);
+                    else
+                        aiPatrolState(pDest, pXDest, kAiStatePatrolMove);
                     pXDest->data3 = 0;  // reset the spot progress
                 }
                 else
@@ -1272,30 +1323,34 @@ static char canSee(spritetype* pSpr, spritetype* pOth)
     return 0;
 }
 //-------------------------------------------------------------------------
-static void aiPatrolSetupCrouchFlag(spritetype* pSpr, XSPRITE* pXSpr, int nMask)
+static char aiPatrolSetupCrouchFlag(spritetype* pSpr, XSPRITE* pXSpr, int nMask)
 {
+    int t = pXSpr->unused4;
+    char ok = 0;
+    
     switch (nMask)
     {
         case kModernTypeFlag3: pXSpr->unused4 ^= kDudeFlagCrouch;  break;
         case kModernTypeFlag2: pXSpr->unused4 &= ~kDudeFlagCrouch; break;
         case kModernTypeFlag1: pXSpr->unused4 |= kDudeFlagCrouch;  break;
-        default: return;
+        default: return 0;
     }
 
     if (pXSpr->unused4 & kDudeFlagCrouch)
     {
         if (rngok(pSpr->type, kDudeBase, kDudeVanillaMax))
         {
-            DUDEINFO_EXTRA* pExtra = &gDudeInfoExtra[pSpr->type-kDudeBase];
-            if (pExtra->idlcseqofs >= 0 && pExtra->mvecseqofs >= 0)
-                return;
+            DUDEINFO_EXTRA* pExtra = &gDudeInfoExtra[pSpr->type - kDudeBase];
+            ok = (pExtra->idlcseqofs >= 0 && pExtra->mvecseqofs >= 0);
         }
-        else if (IsCustomDude(pSpr)
-            && cdudeGet(pSpr->index)->CanCrouch())
-                return;
+        else
+            ok = (IsCustomDude(pSpr) & cdudeGet(pSpr->index)->CanCrouch());
 
-        pXSpr->unused4 &= ~kDudeFlagCrouch;
+        if (ok == 0)
+            pXSpr->unused4 &= ~kDudeFlagCrouch;
     }
+
+    return (t != pXSpr->unused4);
 }
 
 

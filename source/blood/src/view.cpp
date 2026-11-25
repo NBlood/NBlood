@@ -3525,6 +3525,13 @@ void viewDrawScreen(void)
     int nPalette = 0;
     static ClockTicks lastUpdate;
     int defaultHoriz = gCenterHoriz ? 100 : 90;
+    char isCamera = 0;
+    int nCamScrAng = 0;
+
+#ifdef NOONE_EXTENSIONS
+    if (gModernMap)
+        isCamera = isCameraSprite(gView->pSprite);
+#endif
 
 #ifdef USE_OPENGL
     polymostcenterhoriz = defaultHoriz;
@@ -3579,6 +3586,31 @@ void viewDrawScreen(void)
         int v4c = gView->swayWidth;
         int v48 = gView->swayHeight;
         int nSectnum = gView->pSprite->sectnum;
+
+#ifdef NOONE_EXTENSIONS
+        if (isCamera)
+        {
+            VIEWCAMERA* pCam = (VIEWCAMERA*)gView;
+
+            cA = pCam->viewAng;
+            nCamScrAng = pCam->scrAng;
+            q16horiz = pCam->viewSlope;
+
+            if (gViewInterpolate)
+            {
+                cX = interpolate(pCam->ix, cX, gInterpolate);
+                cY = interpolate(pCam->iy, cY, gInterpolate);
+                cZ = interpolate(pCam->iz, cZ, gInterpolate);
+                cA = interpolateang(pCam->ia, cA, gInterpolate);
+                q16horiz = interpolate(pCam->ih, q16horiz, gInterpolate);
+                nCamScrAng = interpolateang(pCam->it, nCamScrAng, gInterpolate);
+            }
+
+            cA = fix16_from_int(cA);
+            q16horiz = fix16_from_int(q16horiz);
+        }
+        else
+#endif
         if (gViewInterpolate)
         {
             if (numplayers > 1 && gView == gMe && gPrediction && gMe->pXSprite->health > 0)
@@ -3655,7 +3687,12 @@ void viewDrawScreen(void)
             CalcPosition(gView->pSprite, (int*)&cX, (int*)&cY, (int*)&cZ, &nSectnum, fix16_to_int(cA), q16horiz);
         }
         const char bLink = CheckLink((int*)&cX, (int*)&cY, (int*)&cZ, &nSectnum);
-        int nTilt = gViewInterpolate ? interpolateang(gScreenTiltO, gScreenTilt, gInterpolate) : gScreenTilt;
+        int nTilt;
+        
+        if (nCamScrAng)             nTilt = nCamScrAng;
+        else if (gViewInterpolate)  nTilt = interpolateang(gScreenTiltO, gScreenTilt, gInterpolate);
+        else                        nTilt = gScreenTilt;
+
         char nPalCrystalBall = 0;
         bool bDelirium = powerupCheck(gView, kPwUpDeliriumShroom) > 0;
         static bool bDeliriumOld = false;
@@ -4117,8 +4154,11 @@ RORHACK:
     }
     else if (gView != gMe)
     {
-        sprintf(gTempStr, "] %s [", gProfile[gView->nPlayer].name);
-        viewDrawText(0, gTempStr, 160, 10, 0, 0, 1, 0);
+        if (!isCamera)
+        {
+            sprintf(gTempStr, "] %s [", gProfile[gView->nPlayer].name);
+            viewDrawText(0, gTempStr, 160, 10, 0, 0, 1, 0);
+        }
     }
     if (errMsg[0])
     {

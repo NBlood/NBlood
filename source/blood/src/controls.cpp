@@ -35,6 +35,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "levels.h"
 #include "map2d.h"
 #include "view.h"
+#ifdef NOONE_EXTENSIONS
+#include "nnexts.h"
+#endif
 
 
 int32_t ctrlCheckAllInput(void)
@@ -177,6 +180,21 @@ void ctrlGetInput(void)
     if (gMouseAiming)
         gMouseAim = 0;
 
+#ifdef NOONE_EXTENSIONS
+    char controlsDisabled = 0;
+    char processDisabled = 0;
+
+    if (gModernMap && gMe)
+    {
+        XSPRITE* pXSpr = gMe->pXSprite;
+        if (isCameraSprite(gMe->pSprite))
+            pXSpr = gPlayer[gMe->nPlayer].pXSprite;
+        
+        controlsDisabled = (pXSpr->sysData1 & kInputDisableAll) != 0;
+        processDisabled  = (pXSpr->sysData1 & kInputProcessNone) != 0;
+    }
+#endif
+
     if (BUTTON(gamefunc_Mouse_Aiming))
     {
         if (gMouseAiming)
@@ -202,362 +220,376 @@ void ctrlGetInput(void)
         gInput.keyFlags.lookCenter = 1;
 
     CONTROL_GetInput(&info);
-
-    if (MouseDeadZone)
+#ifdef NOONE_EXTENSIONS
+    if (!controlsDisabled)
+#endif
     {
-        if (info.mousey > 0)
-            info.mousey = max(info.mousey - MouseDeadZone, 0);
-        else if (info.mousey < 0)
-            info.mousey = min(info.mousey + MouseDeadZone, 0);
+        if (MouseDeadZone)
+        {
+            if (info.mousey > 0)
+                info.mousey = max(info.mousey - MouseDeadZone, 0);
+            else if (info.mousey < 0)
+                info.mousey = min(info.mousey + MouseDeadZone, 0);
 
-        if (info.mousex > 0)
-            info.mousex = max(info.mousex - MouseDeadZone, 0);
-        else if (info.mousex < 0)
-            info.mousex = min(info.mousex + MouseDeadZone, 0);
-    }
+            if (info.mousex > 0)
+                info.mousex = max(info.mousex - MouseDeadZone, 0);
+            else if (info.mousex < 0)
+                info.mousex = min(info.mousex + MouseDeadZone, 0);
+        }
 
-    if (MouseBias)
-    {
-        if (klabs(info.mousex) > klabs(info.mousey))
-            info.mousey = tabledivide32_noinline(info.mousey, MouseBias);
+        if (MouseBias)
+        {
+            if (klabs(info.mousex) > klabs(info.mousey))
+                info.mousey = tabledivide32_noinline(info.mousey, MouseBias);
+            else
+                info.mousex = tabledivide32_noinline(info.mousex, MouseBias);
+        }
+
+        if (gQuitRequest)
+            gInput.keyFlags.quit = 1;
+
+        if (gGameStarted && gInputMode != INPUT_MODE_2 && gInputMode != INPUT_MODE_1
+            && BUTTON(gamefunc_Send_Message))
+        {
+            CONTROL_ClearButton(gamefunc_Send_Message);
+            keyFlushScans();
+            gInputMode = INPUT_MODE_2;
+        }
+
+        if (BUTTON(gamefunc_AutoRun))
+        {
+            CONTROL_ClearButton(gamefunc_AutoRun);
+            gAutoRun = !gAutoRun;
+            if (gAutoRun)
+                viewSetMessage("Auto run ON");
+            else
+                viewSetMessage("Auto run OFF");
+        }
+
+        if (BUTTON(gamefunc_Map_Toggle))
+        {
+            CONTROL_ClearButton(gamefunc_Map_Toggle);
+            viewToggle(gViewMode);
+        }
+
+        if (gViewMode == 4 && BUTTON(gamefunc_Map_Follow_Mode))
+        {
+            CONTROL_ClearButton(gamefunc_Map_Follow_Mode);
+            gFollowMap = !gFollowMap;
+            gViewMap.FollowMode(gFollowMap);
+        }
+
+        if (BUTTON(gamefunc_Shrink_Screen))
+        {
+            if (gViewMode == 3)
+            {
+                CONTROL_ClearButton(gamefunc_Shrink_Screen);
+                viewResizeView(gViewSize + 1);
+            }
+            if (gViewMode == 2 || gViewMode == 4)
+            {
+                gZoom = ClipLow(gZoom - (elapsedTics << 5), 64);
+                gViewMap.nZoom = gZoom;
+            }
+        }
+
+        if (BUTTON(gamefunc_Enlarge_Screen))
+        {
+            if (gViewMode == 3)
+            {
+                CONTROL_ClearButton(gamefunc_Enlarge_Screen);
+                viewResizeView(gViewSize - 1);
+            }
+            if (gViewMode == 2 || gViewMode == 4)
+            {
+                gZoom = ClipHigh(gZoom + (elapsedTics << 5), 4096);
+                gViewMap.nZoom = gZoom;
+            }
+        }
+
+        if (BUTTON(gamefunc_Toggle_Crosshair))
+        {
+            CONTROL_ClearButton(gamefunc_Toggle_Crosshair);
+            gAimReticle = !gAimReticle;
+        }
+
+        if (BUTTON(gamefunc_Next_Weapon))
+        {
+            CONTROL_ClearButton(gamefunc_Next_Weapon);
+            gInput.keyFlags.nextWeapon = 1;
+        }
+
+        if (BUTTON(gamefunc_Previous_Weapon))
+        {
+            CONTROL_ClearButton(gamefunc_Previous_Weapon);
+            gInput.keyFlags.prevWeapon = 1;
+        }
+
+        if (BUTTON(gamefunc_Last_Weapon))
+        {
+            CONTROL_ClearButton(gamefunc_Last_Weapon);
+            gInput.keyFlags.lastWeapon = 1;
+        }
+
+        if (BUTTON(gamefunc_Show_Opponents_Weapon))
+        {
+            CONTROL_ClearButton(gamefunc_Show_Opponents_Weapon);
+            gShowWeapon = (gShowWeapon + 1) % 3;
+        }
+
+        if (BUTTON(gamefunc_Jump))
+            gInput.buttonFlags.jump = 1;
+
+        if (BUTTON(gamefunc_Crouch))
+            gInput.buttonFlags.crouch = 1, gCrouchToggleState = 0;
+
+        if (BUTTON(gamefunc_Crouch_Toggle) && !gInput.buttonFlags.jump)
+        {
+            if (gMe && gMe->isUnderwater)
+                gCrouchToggleState = 0, gInput.buttonFlags.crouch = 1;
+            else if (gCrouchToggleState <= 1) // start crouching
+                gCrouchToggleState = 1, gInput.buttonFlags.crouch = 1;
+            else if (gCrouchToggleState == 2) // stop crouching
+                gCrouchToggleState = 3;
+        }
+        else if ((gCrouchToggleState > 0) && (gCrouchToggleState < 3) && !gInput.buttonFlags.jump && gMe && !gMe->isUnderwater)
+        {
+            gCrouchToggleState = 2;
+            gInput.buttonFlags.crouch = 1;
+        }
         else
-            info.mousex = tabledivide32_noinline(info.mousex, MouseBias);
-    }
+        {
+            gCrouchToggleState = 0;
+        }
 
-    if (gQuitRequest)
-        gInput.keyFlags.quit = 1;
+        if (BUTTON(gamefunc_Weapon_Fire))
+            gInput.buttonFlags.shoot = 1;
 
-    if (gGameStarted && gInputMode != INPUT_MODE_2 && gInputMode != INPUT_MODE_1
-        && BUTTON(gamefunc_Send_Message))
-    {
-        CONTROL_ClearButton(gamefunc_Send_Message);
-        keyFlushScans();
-        gInputMode = INPUT_MODE_2;
-    }
+        if (BUTTON(gamefunc_Weapon_Special_Fire))
+            gInput.buttonFlags.shoot2 = 1;
 
-    if (BUTTON(gamefunc_AutoRun))
-    {
-        CONTROL_ClearButton(gamefunc_AutoRun);
-        gAutoRun = !gAutoRun;
-        if (gAutoRun)
-            viewSetMessage("Auto run ON");
+        if (BUTTON(gamefunc_Open))
+        {
+            CONTROL_ClearButton(gamefunc_Open);
+            gInput.keyFlags.action = 1;
+        }
+
+        gInput.buttonFlags.lookUp |= BUTTON(gamefunc_Look_Up);
+        gInput.buttonFlags.lookDown |= BUTTON(gamefunc_Look_Down);
+
+        if (BUTTON(gamefunc_Look_Up) || BUTTON(gamefunc_Look_Down))
+            gInput.keyFlags.lookCenter = 1;
         else
-            viewSetMessage("Auto run OFF");
-    }
-
-    if (BUTTON(gamefunc_Map_Toggle))
-    {
-        CONTROL_ClearButton(gamefunc_Map_Toggle);
-        viewToggle(gViewMode);
-    }
-
-    if (gViewMode == 4 && BUTTON(gamefunc_Map_Follow_Mode))
-    {
-        CONTROL_ClearButton(gamefunc_Map_Follow_Mode);
-        gFollowMap = !gFollowMap;
-        gViewMap.FollowMode(gFollowMap);
-    }
-
-    if (BUTTON(gamefunc_Shrink_Screen))
-    {
-        if (gViewMode == 3)
         {
-            CONTROL_ClearButton(gamefunc_Shrink_Screen);
-            viewResizeView(gViewSize + 1);
+            gInput.buttonFlags.lookUp |= BUTTON(gamefunc_Aim_Up);
+            gInput.buttonFlags.lookDown |= BUTTON(gamefunc_Aim_Down);
         }
-        if (gViewMode == 2 || gViewMode == 4)
+
+        if (BUTTON(gamefunc_Aim_Center))
         {
-            gZoom = ClipLow(gZoom - (elapsedTics<<5), 64);
-            gViewMap.nZoom = gZoom;
+            CONTROL_ClearButton(gamefunc_Aim_Center);
+            gInput.keyFlags.lookCenter = 1;
         }
-    }
 
-    if (BUTTON(gamefunc_Enlarge_Screen))
-    {
-        if (gViewMode == 3)
+        gInput.keyFlags.spin180 |= BUTTON(gamefunc_Turn_Around);
+
+        if (BUTTON(gamefunc_Inventory_Left))
         {
-            CONTROL_ClearButton(gamefunc_Enlarge_Screen);
-            viewResizeView(gViewSize - 1);
+            CONTROL_ClearButton(gamefunc_Inventory_Left);
+            gInput.keyFlags.prevItem = 1;
         }
-        if (gViewMode == 2 || gViewMode == 4)
+
+        if (BUTTON(gamefunc_Inventory_Right))
         {
-            gZoom = ClipHigh(gZoom + (elapsedTics<<5), 4096);
-            gViewMap.nZoom = gZoom;
+            CONTROL_ClearButton(gamefunc_Inventory_Right);
+            gInput.keyFlags.nextItem = 1;
         }
-    }
 
-    if (BUTTON(gamefunc_Toggle_Crosshair))
-    {
-        CONTROL_ClearButton(gamefunc_Toggle_Crosshair);
-        gAimReticle = !gAimReticle;
-    }
-
-    if (BUTTON(gamefunc_Next_Weapon))
-    {
-        CONTROL_ClearButton(gamefunc_Next_Weapon);
-        gInput.keyFlags.nextWeapon = 1;
-    }
-
-    if (BUTTON(gamefunc_Previous_Weapon))
-    {
-        CONTROL_ClearButton(gamefunc_Previous_Weapon);
-        gInput.keyFlags.prevWeapon = 1;
-    }
-
-    if (BUTTON(gamefunc_Last_Weapon))
-    {
-        CONTROL_ClearButton(gamefunc_Last_Weapon);
-        gInput.keyFlags.lastWeapon = 1;
-    }
-
-    if (BUTTON(gamefunc_Show_Opponents_Weapon))
-    {
-        CONTROL_ClearButton(gamefunc_Show_Opponents_Weapon);
-        gShowWeapon = (gShowWeapon+1)%3;
-    }
-
-    if (BUTTON(gamefunc_Jump))
-        gInput.buttonFlags.jump = 1;
-
-    if (BUTTON(gamefunc_Crouch))
-        gInput.buttonFlags.crouch = 1, gCrouchToggleState = 0;
-
-    if (BUTTON(gamefunc_Crouch_Toggle) && !gInput.buttonFlags.jump)
-    {
-        if (gMe && gMe->isUnderwater)
-            gCrouchToggleState = 0, gInput.buttonFlags.crouch = 1;
-        else if (gCrouchToggleState <= 1) // start crouching
-            gCrouchToggleState = 1, gInput.buttonFlags.crouch = 1;
-        else if (gCrouchToggleState == 2) // stop crouching
-            gCrouchToggleState = 3;
-    }
-    else if ((gCrouchToggleState > 0) && (gCrouchToggleState < 3) && !gInput.buttonFlags.jump && gMe && !gMe->isUnderwater)
-    {
-        gCrouchToggleState = 2;
-        gInput.buttonFlags.crouch = 1;
-    }
-    else
-    {
-        gCrouchToggleState = 0;
-    }
-
-    if (BUTTON(gamefunc_Weapon_Fire))
-        gInput.buttonFlags.shoot = 1;
-
-    if (BUTTON(gamefunc_Weapon_Special_Fire))
-        gInput.buttonFlags.shoot2 = 1;
-
-    if (BUTTON(gamefunc_Open))
-    {
-        CONTROL_ClearButton(gamefunc_Open);
-        gInput.keyFlags.action = 1;
-    }
-
-    gInput.buttonFlags.lookUp |= BUTTON(gamefunc_Look_Up);
-    gInput.buttonFlags.lookDown |= BUTTON(gamefunc_Look_Down);
-
-    if (BUTTON(gamefunc_Look_Up) || BUTTON(gamefunc_Look_Down))
-        gInput.keyFlags.lookCenter = 1;
-    else
-    {
-        gInput.buttonFlags.lookUp |= BUTTON(gamefunc_Aim_Up);
-        gInput.buttonFlags.lookDown |= BUTTON(gamefunc_Aim_Down);
-    }
-
-    if (BUTTON(gamefunc_Aim_Center))
-    {
-        CONTROL_ClearButton(gamefunc_Aim_Center);
-        gInput.keyFlags.lookCenter = 1;
-    }
-
-    gInput.keyFlags.spin180 |= BUTTON(gamefunc_Turn_Around);
-
-    if (BUTTON(gamefunc_Inventory_Left))
-    {
-        CONTROL_ClearButton(gamefunc_Inventory_Left);
-        gInput.keyFlags.prevItem = 1;
-    }
-
-    if (BUTTON(gamefunc_Inventory_Right))
-    {
-        CONTROL_ClearButton(gamefunc_Inventory_Right);
-        gInput.keyFlags.nextItem = 1;
-    }
-
-    if (BUTTON(gamefunc_Inventory_Use))
-    {
-        CONTROL_ClearButton(gamefunc_Inventory_Use);
-        gInput.keyFlags.useItem = 1;
-    }
-
-    if (BUTTON(gamefunc_BeastVision))
-    {
-        CONTROL_ClearButton(gamefunc_BeastVision);
-        gInput.useFlags.useBeastVision = 1;
-    }
-
-    if (BUTTON(gamefunc_CrystalBall))
-    {
-        CONTROL_ClearButton(gamefunc_CrystalBall);
-        gInput.useFlags.useCrystalBall = 1;
-    }
-
-    if (BUTTON(gamefunc_JumpBoots))
-    {
-        CONTROL_ClearButton(gamefunc_JumpBoots);
-        gInput.useFlags.useJumpBoots = 1;
-    }
-
-    if (BUTTON(gamefunc_MedKit))
-    {
-        CONTROL_ClearButton(gamefunc_MedKit);
-        gInput.useFlags.useMedKit = 1;
-    }
-
-    for (int i = 0; i < 10; i++)
-    {
-        if (BUTTON(gamefunc_Weapon_1 + i))
+        if (BUTTON(gamefunc_Inventory_Use))
         {
-            CONTROL_ClearButton(gamefunc_Weapon_1 + i);
-            gInput.newWeapon = 1 + i;
+            CONTROL_ClearButton(gamefunc_Inventory_Use);
+            gInput.keyFlags.useItem = 1;
         }
-    }
 
-    if (BUTTON(gamefunc_ProximityBombs))
-    {
-        CONTROL_ClearButton(gamefunc_ProximityBombs);
-        gInput.newWeapon = kWeaponProxyTNT;
-    }
+        if (BUTTON(gamefunc_BeastVision))
+        {
+            CONTROL_ClearButton(gamefunc_BeastVision);
+            gInput.useFlags.useBeastVision = 1;
+        }
 
-    if (BUTTON(gamefunc_RemoteBombs))
-    {
-        CONTROL_ClearButton(gamefunc_RemoteBombs);
-        gInput.newWeapon = kWeaponRemoteTNT;
-    }
+        if (BUTTON(gamefunc_CrystalBall))
+        {
+            CONTROL_ClearButton(gamefunc_CrystalBall);
+            gInput.useFlags.useCrystalBall = 1;
+        }
 
-    if (BUTTON(gamefunc_Holster_Weapon))
-    {
-        CONTROL_ClearButton(gamefunc_Holster_Weapon);
-        gInput.keyFlags.holsterWeapon = 1;
-    }
+        if (BUTTON(gamefunc_JumpBoots))
+        {
+            CONTROL_ClearButton(gamefunc_JumpBoots);
+            gInput.useFlags.useJumpBoots = 1;
+        }
 
-    int const run = gRunKeyMode ? (BUTTON(gamefunc_Run) | gAutoRun) : (BUTTON(gamefunc_Run) ^ gAutoRun);
-    int const run2 = BUTTON(gamefunc_Run);
-    int const keyMove = (1 + run) << 10;
+        if (BUTTON(gamefunc_MedKit))
+        {
+            CONTROL_ClearButton(gamefunc_MedKit);
+            gInput.useFlags.useMedKit = 1;
+        }
 
-    gInput.syncFlags.run |= run;
+        for (int i = 0; i < 10; i++)
+        {
+            if (BUTTON(gamefunc_Weapon_1 + i))
+            {
+                CONTROL_ClearButton(gamefunc_Weapon_1 + i);
+                gInput.newWeapon = 1 + i;
+            }
+        }
 
-    if (gInput.forward < keyMove && gInput.forward > -keyMove)
-    {
-        if (BUTTON(gamefunc_Move_Forward))
-            input.forward += keyMove;
+        if (BUTTON(gamefunc_ProximityBombs))
+        {
+            CONTROL_ClearButton(gamefunc_ProximityBombs);
+            gInput.newWeapon = kWeaponProxyTNT;
+        }
 
-        if (BUTTON(gamefunc_Move_Backward))
-            input.forward -= keyMove;
-    }
+        if (BUTTON(gamefunc_RemoteBombs))
+        {
+            CONTROL_ClearButton(gamefunc_RemoteBombs);
+            gInput.newWeapon = kWeaponRemoteTNT;
+        }
 
-    if (gInput.strafe < keyMove && gInput.strafe > -keyMove)
-    {
-        if (BUTTON(gamefunc_Strafe_Left))
-            input.strafe += keyMove;
-        if (BUTTON(gamefunc_Strafe_Right))
-            input.strafe -= keyMove;
-    }
+        if (BUTTON(gamefunc_Holster_Weapon))
+        {
+            CONTROL_ClearButton(gamefunc_Holster_Weapon);
+            gInput.keyFlags.holsterWeapon = 1;
+        }
 
+        int const run = gRunKeyMode ? (BUTTON(gamefunc_Run) | gAutoRun) : (BUTTON(gamefunc_Run) ^ gAutoRun);
+        int const run2 = BUTTON(gamefunc_Run);
+        int const keyMove = (1 + run) << 10;
 
-    char turnLeft = 0, turnRight = 0;
+        gInput.syncFlags.run |= run;
 
-    if (BUTTON(gamefunc_Strafe))
-    {
+        if (gInput.forward < keyMove && gInput.forward > -keyMove)
+        {
+            if (BUTTON(gamefunc_Move_Forward))
+                input.forward += keyMove;
+
+            if (BUTTON(gamefunc_Move_Backward))
+                input.forward -= keyMove;
+        }
+
         if (gInput.strafe < keyMove && gInput.strafe > -keyMove)
         {
-            if (BUTTON(gamefunc_Turn_Left))
+            if (BUTTON(gamefunc_Strafe_Left))
                 input.strafe += keyMove;
-            if (BUTTON(gamefunc_Turn_Right))
+            if (BUTTON(gamefunc_Strafe_Right))
                 input.strafe -= keyMove;
         }
-    }
-    else
-    {
-        if (BUTTON(gamefunc_Turn_Left))
-            turnLeft = 1;
-        if (BUTTON(gamefunc_Turn_Right))
-            turnRight = 1;
-    }
 
-    static int32_t turnHeldTime;
 
-    if (turnLeft || turnRight)
-        turnHeldTime += elapsedTics;
-    else
-        turnHeldTime = 0;
+        char turnLeft = 0, turnRight = 0;
 
-    if (turnLeft)
-        input.q16turn = fix16_ssub(input.q16turn, fix16_from_float(scaleAdjustmentToInterval(ClipHigh(12 * turnHeldTime, gTurnSpeed)>>2)));
-    if (turnRight)
-        input.q16turn = fix16_sadd(input.q16turn, fix16_from_float(scaleAdjustmentToInterval(ClipHigh(12 * turnHeldTime, gTurnSpeed)>>2)));
-
-    if (!gTurnAcceleration || (((gTurnAcceleration == 2) || run2 || run) && (turnHeldTime > 24)))
-        input.q16turn <<= 1;
-
-    if (BUTTON(gamefunc_Strafe))
-        input.strafe -= info.mousex;
-    else
-        input.q16turn = fix16_sadd(input.q16turn, fix16_sdiv(fix16_from_int(info.mousex), F16(32)));
-
-    if (gMouseAim)
-        input.q16mlook = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_int(gMouseAimingFlipped ? info.mousey : -info.mousey), F16(128)));
-    else
-        input.forward -= info.mousey;
-
-    if (CONTROL_JoystickEnabled) // controller input
-    {
-        input.strafe -= int(scaleAdjustmentToInterval(info.dx)/2.f);
-        input.forward -= int(scaleAdjustmentToInterval(info.dz)/2.f);
-        if (!run) // when autorun is off/run is not held, reduce overall speed for controller
+        if (BUTTON(gamefunc_Strafe))
         {
-            input.strafe = clamp(input.strafe, -256, 256);
-            input.forward = clamp(input.forward, -256, 256);
+            if (gInput.strafe < keyMove && gInput.strafe > -keyMove)
+            {
+                if (BUTTON(gamefunc_Turn_Left))
+                    input.strafe += keyMove;
+                if (BUTTON(gamefunc_Turn_Right))
+                    input.strafe -= keyMove;
+            }
         }
-        if (info.mousey == 0)
+        else
         {
-            if (gMouseAim)
-                input.q16mlook = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_float(scaleAdjustmentToInterval(gMouseAimingFlipped ? info.dpitch : -info.dpitch)/16.f), F16(128)));
-            else
-                input.forward -= int(scaleAdjustmentToInterval(info.dpitch)/2.f);
+            if (BUTTON(gamefunc_Turn_Left))
+                turnLeft = 1;
+            if (BUTTON(gamefunc_Turn_Right))
+                turnRight = 1;
         }
-        input.q16turn = fix16_sadd(input.q16turn, fix16_sdiv(fix16_from_float(scaleAdjustmentToInterval(info.dyaw)/16.f), F16(32)));
-        if (gCenterViewOnDrop == 2)
+
+        static int32_t turnHeldTime;
+
+        if (turnLeft || turnRight)
+            turnHeldTime += elapsedTics;
+        else
+            turnHeldTime = 0;
+
+        if (turnLeft)
+            input.q16turn = fix16_ssub(input.q16turn, fix16_from_float(scaleAdjustmentToInterval(ClipHigh(12 * turnHeldTime, gTurnSpeed) >> 2)));
+        if (turnRight)
+            input.q16turn = fix16_sadd(input.q16turn, fix16_from_float(scaleAdjustmentToInterval(ClipHigh(12 * turnHeldTime, gTurnSpeed) >> 2)));
+
+        if (!gTurnAcceleration || (((gTurnAcceleration == 2) || run2 || run) && (turnHeldTime > 24)))
+            input.q16turn <<= 1;
+
+        if (BUTTON(gamefunc_Strafe))
+            input.strafe -= info.mousex;
+        else
+            input.q16turn = fix16_sadd(input.q16turn, fix16_sdiv(fix16_from_int(info.mousex), F16(32)));
+
+        if (gMouseAim)
+            input.q16mlook = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_int(gMouseAimingFlipped ? info.mousey : -info.mousey), F16(128)));
+        else
+            input.forward -= info.mousey;
+
+        if (CONTROL_JoystickEnabled) // controller input
         {
-            gInput.keyFlags.lookCenter = 1;
-            gCenterViewOnDrop = 1;
+            input.strafe -= int(scaleAdjustmentToInterval(info.dx) / 2.f);
+            input.forward -= int(scaleAdjustmentToInterval(info.dz) / 2.f);
+            if (!run) // when autorun is off/run is not held, reduce overall speed for controller
+            {
+                input.strafe = clamp(input.strafe, -256, 256);
+                input.forward = clamp(input.forward, -256, 256);
+            }
+            if (info.mousey == 0)
+            {
+                if (gMouseAim)
+                    input.q16mlook = fix16_sadd(input.q16mlook, fix16_sdiv(fix16_from_float(scaleAdjustmentToInterval(gMouseAimingFlipped ? info.dpitch : -info.dpitch) / 16.f), F16(128)));
+                else
+                    input.forward -= int(scaleAdjustmentToInterval(info.dpitch) / 2.f);
+            }
+            input.q16turn = fix16_sadd(input.q16turn, fix16_sdiv(fix16_from_float(scaleAdjustmentToInterval(info.dyaw) / 16.f), F16(32)));
+            if (gCenterViewOnDrop == 2)
+            {
+                gInput.keyFlags.lookCenter = 1;
+                gCenterViewOnDrop = 1;
+            }
         }
+
+        if (KB_KeyPressed(sc_Pause)) // 0xc5 in disassembly
+        {
+            gInput.keyFlags.pause = 1;
+            KB_ClearKeyDown(sc_Pause);
+        }
+
+        if (!gViewMap.bFollowMode && gViewMode == 4)
+        {
+            const int nForward = gMouseAim ? input.forward : clamp(-info.mousey, -2048, 2048);
+            const int nStrafe = input.strafe;
+            const int nSpeed = ClipLow((4096 - gZoom) >> 6, 16);
+            gViewMap.turn += input.q16turn << 2;
+            gViewMap.forward += gMouseAim ? int(scaleAdjustmentToInterval(nForward)) * nSpeed : nForward;
+            gViewMap.strafe += int(scaleAdjustmentToInterval(nStrafe)) * nSpeed;
+            input.q16turn = 0;
+            input.forward = 0;
+            input.strafe = 0;
+        }
+        gInput.forward = clamp(gInput.forward + input.forward, -2048, 2048);
+        gInput.strafe = clamp(gInput.strafe + input.strafe, -2048, 2048);
+        gInput.q16turn = fix16_sadd(gInput.q16turn, input.q16turn);
+        gInput.q16mlook = fix16_clamp(fix16_sadd(gInput.q16mlook, input.q16mlook), F16(-127) >> 2, F16(127) >> 2);
     }
 
-    if (KB_KeyPressed(sc_Pause)) // 0xc5 in disassembly
-    {
-        gInput.keyFlags.pause = 1;
-        KB_ClearKeyDown(sc_Pause);
-    }
-
-    if (!gViewMap.bFollowMode && gViewMode == 4)
-    {
-        const int nForward = gMouseAim ? input.forward : clamp(-info.mousey, -2048, 2048);
-        const int nStrafe = input.strafe;
-        const int nSpeed = ClipLow((4096-gZoom)>>6, 16);
-        gViewMap.turn += input.q16turn<<2;
-        gViewMap.forward += gMouseAim ? int(scaleAdjustmentToInterval(nForward))*nSpeed : nForward;
-        gViewMap.strafe += int(scaleAdjustmentToInterval(nStrafe))*nSpeed;
-        input.q16turn = 0;
-        input.forward = 0;
-        input.strafe = 0;
-    }
-    gInput.forward = clamp(gInput.forward + input.forward, -2048, 2048);
-    gInput.strafe = clamp(gInput.strafe + input.strafe, -2048, 2048);
-    gInput.q16turn = fix16_sadd(gInput.q16turn, input.q16turn);
-    gInput.q16mlook = fix16_clamp(fix16_sadd(gInput.q16mlook, input.q16mlook), F16(-127)>>2, F16(127)>>2);
     if (gMe && gMe->pXSprite->health != 0 && !gPaused)
     {
+
+#ifdef NOONE_EXTENSIONS
+        if (processDisabled)
+        {
+            input.q16turn = 0;
+            input.q16mlook = 0;
+        }
+#endif
+
         CONSTEXPR int upAngle = 289;
         CONSTEXPR int downAngle = -347;
         CONSTEXPR double lookStepUp = 4.0*upAngle/60.0;

@@ -42,12 +42,12 @@ int aiPatrolMarkerBusy(int nExcept, int nMark);
 char aiPatrolMarkerReached(spritetype* pSpr, XSPRITE* pXSpr);
 void aiPatrolFlagsMgr(spritetype* pSrc, XSPRITE* pXSrc, spritetype* pDest, XSPRITE* pXDest, char copy, char init);
 
-FORCE_INLINE char aiPatrolWaiting(AISTATE* pState)  { return pState->stateType == kAiStatePatrolIdle; }
-FORCE_INLINE char aiPatrolMoving(AISTATE* pState)   { return pState->stateType == kAiStatePatrolMove; }
-FORCE_INLINE char aiPatrolTurning(AISTATE* pState)  { return pState->stateType == kAiStatePatrolTurn; }
-FORCE_INLINE char aiPatrolGuarding(AISTATE* pState) { return pState->stateType == kAiStatePatrolGuard; }
+FORCE_INLINE char aiPatrolWaiting(AISTATE* pState)  { return pState && pState->stateType == kAiStatePatrolIdle; }
+FORCE_INLINE char aiPatrolMoving(AISTATE* pState)   { return pState && pState->stateType == kAiStatePatrolMove; }
+FORCE_INLINE char aiPatrolTurning(AISTATE* pState)  { return pState && pState->stateType == kAiStatePatrolTurn; }
+FORCE_INLINE char aiPatrolGuarding(AISTATE* pState) { return pState && pState->stateType == kAiStatePatrolGuard; }
 FORCE_INLINE char aiInPatrolState(int nState)       { return rngok(nState, kAiStatePatrolBase, kAiStatePatrolMax); }
-FORCE_INLINE char aiInPatrolState(AISTATE* pState)  { return aiInPatrolState(pState->stateType); }
+FORCE_INLINE char aiInPatrolState(AISTATE* pState)  { return pState && aiInPatrolState(pState->stateType); }
 //  -------------------------------------------------------------------------   //
 
 #endif

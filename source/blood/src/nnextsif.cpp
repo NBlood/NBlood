@@ -1234,17 +1234,49 @@ static char plyCmpPowerupAmount(void)
 static char plyChkKillerSprite(void)    { return helperChkSprite(pPlayer->fraggerId); }
 static char plyChkKeyPress(void)
 {
+    GINPUT* p = &gFifoInput[(gNetFifoTail-1) & 255][pPlayer->nPlayer];
+    
     switch (arg1)
     {
-        case 1:  return (pPlayer->input.forward > 0);            // forward
-        case 2:  return (pPlayer->input.forward < 0);            // backward
-        case 3:  return (pPlayer->input.strafe > 0);             // left
-        case 4:  return (pPlayer->input.strafe < 0);             // right
-        case 5:  return (pPlayer->input.buttonFlags.jump);       // jump
-        case 6:  return (pPlayer->input.buttonFlags.crouch);     // crouch
-        case 7:  return (pPlayer->input.buttonFlags.shoot);      // normal fire weapon
-        case 8:  return (pPlayer->input.buttonFlags.shoot2);     // alt fire weapon
-        case 9:  return (pPlayer->input.keyFlags.action);        // use
+        case 1:  return (p->forward > 0);                                       // forward
+        case 2:  return (p->forward < 0);                                       // backward
+        case 3:  return (p->strafe > 0);                                        // left
+        case 4:  return (p->strafe < 0);                                        // right
+        case 5:  return (p->buttonFlags.jump);                                  // jump
+        case 6:  return (p->buttonFlags.crouch);                                // crouch
+        case 7:  return (p->buttonFlags.shoot);                                 // normal fire weapon
+        case 8:  return (p->buttonFlags.shoot2);                                // alt fire weapon
+        case 9:  return (p->keyFlags.action);                                   // action
+        case 10: return (p->q16turn < 0);                                       // turn left
+        case 11: return (p->q16turn > 0);                                       // turn right
+        case 12: return (p->q16mlook < 0 || p->buttonFlags.lookDown);           // look down
+        case 13: return (p->q16mlook > 0 || p->buttonFlags.lookUp);             // look up
+        case 14: return (p->keyFlags.lookCenter);                               // look center
+        case 15: return (p->keyFlags.holsterWeapon);                            // holster
+        case 16:                                                                // sel weapon
+            if (arg2 > 0)
+                return (p->newWeapon == arg2);                                  // certain
+            return (p->newWeapon > 0);                                          // any
+        case 17: return (p->keyFlags.nextWeapon);                               // next
+        case 18: return (p->keyFlags.prevWeapon);                               // prev
+        case 19:                                                                // use item
+            switch (arg2)
+            {
+                case 0: return (p->keyFlags.useItem);                           // any
+                case 1: return (p->useFlags.useBeastVision);                    // beast vision
+                case 2: return (p->useFlags.useCrystalBall);                    // crystal ball
+                case 3: return (p->useFlags.useJumpBoots);                      // jump boots
+                case 4: return (p->useFlags.useMedKit);                         // doctor's bag
+                default:
+                    Error(gErrors[kErrInvalidArgsPass]);
+                    break;
+            }
+            return false;
+        case 20: return (p->keyFlags.nextItem);                                 // next
+        case 21: return (p->keyFlags.prevItem);                                 // prev
+        case 22: return (p->keyFlags.pause);                                    // pause
+        case 23: return (p->keyFlags.restart);                                  // restart
+        case 24: return (p->keyFlags.quit);                                     // quit
         default:
             Error("Specify a correct key!");
             return false;

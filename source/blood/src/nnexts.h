@@ -97,6 +97,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define kMinAllowedPowerup kPwUpFeatherFall
 #define kMaxAllowedPowerup kMaxPowerUps
 
+enum PLAYER_EXTRA_FLAGS
+{
+kInputDisableAll                    = 0x01,
+kInputProcessNone                   = 0x02,
+};
+
 typedef char BITSECTOR[(kMaxSectors+7)>>3];
 typedef char BITSPRITE[(kMaxSprites+7)>>3];
 
@@ -144,6 +150,8 @@ kModernConditionFalse               = 502, /// WIP, sends command only if specif
 kModernSlopeChanger                 = 504,
 kModernLaserGen                     = 505,
 kModernVelocityChanger              = 506,
+kModernViewCamera                   = 507,
+kModernMusicChanger                 = 508,
 kGenModernMissileUniversal          = 704,
 kGenModernSound                     = 708,
 };
@@ -238,6 +246,21 @@ struct QAVSCENE { // this one stores qavs anims that can be played by trigger
 
 struct TRPLAYERCTRL { // this one for controlling the player using triggers (movement speed, jumps and other stuff)
     QAVSCENE qavScene;
+};
+
+struct VIEWCAMERA : PLAYER
+{
+    uint8_t active;
+    uint8_t drawToTile;
+    uint8_t viewSize;
+    uint8_t viewPos;
+    uint8_t aimReticle;
+    int16_t nTrackSpr;
+    int16_t nCamSrc;
+    int16_t nCamSpr;
+    int16_t viewAng, viewSlope, scrAng;
+    int16_t ia, ih, it;
+    int32_t ix, iy, iz;
 };
 
 #ifdef NNEXTS_USE_RES_SYS
@@ -465,6 +488,7 @@ public:
 };
 
 // - VARIABLES ------------------------------------------------------------------
+extern signed char gCustomMusicStatus;
 extern bool gTeamsSpawnUsed;
 extern bool gEventRedirectsUsed;
 extern ZONE gStartZoneTeam1[kMaxPlayers];
@@ -549,6 +573,8 @@ void useCustomDudeSpawn(XSPRITE* pXSource, spritetype* pSprite);
 void useVelocityChanger(XSPRITE* pXSource, int causerID, short objType, int objIndex);
 void useGibObject(XSPRITE* pXSource, spritetype* pSpr);
 void useDripGenerator(XSPRITE* pXSource, spritetype* pSprite);
+void useViewCamera(XSPRITE* pXSrc, spritetype* pCSpr, spritetype* pTSpr, PLAYER* pPlay);
+void processViewCamera(VIEWCAMERA* pCam);
 bool txIsRanged(XSPRITE* pXSource);
 void seqTxSendCmdAll(XSPRITE* pXSource, int nIndex, COMMAND_ID cmd, bool modernSend, int causerID);
 //  -------------------------------------------------------------------------   //
@@ -563,6 +589,7 @@ void trPlayerCtrlSetLookAngle(XSPRITE* pXSource, PLAYER* pPlayer);
 void trPlayerCtrlEraseStuff(XSPRITE* pXSource, PLAYER* pPlayer);
 void trPlayerCtrlGiveStuff(XSPRITE* pXSource, PLAYER* pPlayer, TRPLAYERCTRL* pCtrl);
 void trPlayerCtrlUsePackItem(XSPRITE* pXSource, PLAYER* pPlayer, int evCmd);
+void trPlayerCtrlSendInput(XSPRITE* pXSrc, PLAYER* pPlay);
 //  -------------------------------------------------------------------------   //
 void modernTypeTrigger(int type, int nDest, EVENT event);
 char modernTypeSetSpriteState(int nSprite, XSPRITE* pXSprite, int nState, int causerID);
@@ -576,11 +603,12 @@ bool playerSizeGrow(PLAYER* pPlayer, int multiplier);
 bool playerSizeReset(PLAYER* pPlayer);
 void playerDeactivateShrooms(PLAYER* pPlayer);
 //  -------------------------------------------------------------------------   //
+void playerProcessAiState(void);
 QAV* playerQavSceneLoad(int qavId);
 void playerQavSceneProcess(PLAYER* pPlayer, QAVSCENE* pQavScene);
 void playerQavScenePlay(PLAYER* pPlayer);
 void playerQavSceneDraw(PLAYER* pPlayer, int a2, int a3, int a4, int a5);
-void playerQavSceneReset(PLAYER* pPlayer);
+void nnExtPlayerReset(PLAYER* pPlayer);
 //  -------------------------------------------------------------------------   //
 void callbackUniMissileBurst(int nSprite);
 void callbackMakeMissileBlocking(int nSprite);
@@ -618,6 +646,7 @@ bool isUnderwaterSector(XSECTOR* pXSect);
 bool isUnderwaterSector(sectortype* pSect);
 bool isUnderwaterSector(int nSector);
 bool isOnRespawn(spritetype* pSpr);
+char isCameraSprite(spritetype* pSpr);
 int getDigitFromValue(int nVal, int nOffs);
 void killEffectGenCallbacks(XSPRITE* pXSource);
 bool seqCanOverride(Seq* pSeq, int nFrame, bool* xrp, bool* yrp, bool* plu);

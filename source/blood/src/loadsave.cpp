@@ -258,7 +258,11 @@ void LoadSave::LoadGame(char *pzFile)
             levelAddUserMap(gGameOptions.zLevelName);
         }
     }
-
+#ifdef NOONE_EXTENSIONS
+    if (gCustomMusicStatus > 0)        sndPlaySong(gGameOptions.zLevelSong, gCustomMusicStatus == 1);
+    else if (gCustomMusicStatus == 0)  sndStopSong();
+    else
+#endif
     if (MusicRestartsOnLoadToggle
         || bDemoWasPlayed
         || !bGameWasStarted

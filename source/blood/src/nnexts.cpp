@@ -58,6 +58,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 bool gAllowTrueRandom = false;
 bool gEventRedirectsUsed = false;
+signed char gCustomMusicStatus = -1;
+static VIEWCAMERA gViewCam; // this one for view
+static VIEWCAMERA gMeCam;   // this one for sounds
 
 SPRITEMASS gSpriteMass[];   // cache for getSpriteMassBySize();
 
@@ -193,14 +196,14 @@ DUDEINFO_EXTRA gDudeInfoExtra[] = {
     { false,  false,  0, 7, 0, 7, -1, -1 },         // 228
     { false,  false,  0, 8, 0, 8, -1, -1 },         // 229
     { false,  false,  0, 9, 13, 13, 17, 14 },       // 230
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 231
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 232
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 233
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 234
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 235
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 236
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 237
-    { false,  false,  -1, -1, -1, -1, -1, -1 },     // 238
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 231
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 232
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 233
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 234
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 235
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 236
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 237
+    { false,  false,  0, 6, 9, 9, 10, 11 },         // 238
     { false,  false,  3, 3, 3, 3, -1, -1 },         // 239
     { false,  false,  3, 3, 3, 3, -1, -1 },         // 240
     { false,  false,  3, 3, 3, 3, -1, -1 },         // 241
@@ -221,6 +224,43 @@ DUDEINFO_EXTRA gDudeInfoExtra[] = {
 
 };
 
+struct GINPUTINFO
+{
+    int8_t valMin;
+    int8_t valMax;
+    int8_t valDef;
+    int8_t valShl;
+    uint8_t sync;
+};
+
+GINPUTINFO gInputInfo[] =
+{
+    { 0, 0,                              0, 0,  0x00 },     // 00 (-----) dummy
+    { 0, 4,                              0, 9,  0x00 },     // 01 (-----) forward
+    {-4, 0,                              0, 9,  0x00 },     // 02 (-----) backward
+    {0,  4,                              0, 9,  0x00 },     // 03 (-----) strafe left
+    {-4, 0,                              0, 9,  0x00 },     // 04 (-----) strafe right
+    {0,  1,                              1, 0,  0x04 },     // 05 (--b--) jump
+    {0,  1,                              1, 0,  0x04 },     // 06 (--b--) crouch
+    {0,  1,                              1, 0,  0x04 },     // 07 (--b--) shoot1
+    {0,  1,                              1, 0,  0x04 },     // 08 (--b--) shoot2
+    {0,  1,                              1, 0,  0x01 },     // 09 (k----) action
+    {0,  4,                              4, 20, 0x00 },     // 10 (-----) turn right
+    {-4, 0,                              -4, 20, 0x00 },    // 11 (-----) turn left
+    {0,  4,                              4, 16, 0x08 },     // 12 (---l-) look up
+    {-4, 0,                              -4, 16, 0x08 },    // 13 (---l-) look down
+    {0,  1,                              1, 0,  0x01 },     // 14 (k----) center
+    {0,  1,                              1, 0,  0x01 },     // 15 (k----) holster
+    {0,  LENGTH(PLAYER::hasWeapon)-1,    0, 0,  0x10 },     // 16 (----w) sel weap
+    {0,  1,                              1, 0,  0x11 },     // 17 (----w) next weap
+    {0,  1,                              1, 0,  0x11 },     // 18 (----w) prev weap
+    {0,  4,                              0, 0,  0x03 },     // 19 (ku---) use item
+    {0,  1,                              1, 0,  0x03 },     // 20 (ku---) next item
+    {0,  1,                              1, 0,  0x03 },     // 21 (ku---) prev item
+    {0,  1,                              1, 0,  0x01 },     // 22 (k----) pause
+    {0,  1,                              1, 0,  0x01 },     // 23 (k----) restart
+    {0,  1,                              1, 0,  0x01 },     // 24 (k----) quit
+};
 
 LASER* laserGet(spritetype* pSpr);
 
@@ -852,8 +892,30 @@ void nnExtResetGlobals()
     memset(gSpriteMass, 0, sizeof(gSpriteMass));
 
     lasersClear();
+
+    if (gViewCam.active) // reset view camera to the player
+        useViewCamera(NULL, NULL, NULL, &gPlayer[myconnectindex]);
+
+    gCustomMusicStatus = -1; // reset music to the INI definition
 }
 
+void nnExtPlayerReset(PLAYER* pPlayer)
+{
+    // reset QAV scene
+    QAVSCENE* pQavScene = &gPlayerCtrl[pPlayer->nPlayer].qavScene;
+    pQavScene->index = pQavScene->dummy = pPlayer->sceneQav = -1;
+    pQavScene->qavResrc = NULL;
+
+    if (pPlayer->pSprite && pPlayer->pXSprite)
+    {
+        pPlayer->pXSprite->sysData1 = 0;
+        pPlayer->pXSprite->aiState = NULL;
+        pPlayer->pXSprite->dudeFlag4 = 0;
+    }
+
+    if (gViewCam.active) // reset view camera to the player
+        useViewCamera(NULL, NULL, NULL, &gPlayer[myconnectindex]);
+}
 
 void getSectorWalls(int nSect, int* swal, int* ewal)
 {
@@ -1490,12 +1552,42 @@ spritetype* randomSpawnDude(XSPRITE* pXSource, spritetype* pSprite, int a3, int 
 void nnExtProcessSuperSprites()
 {
     conditionsTrackingProcess();							            // process tracking conditions
-    lasersProcess();
+    playerProcessAiState();                                             // process players controlled by AI
+    lasersProcess();                                                    // process lasers
 
     gProxySpritesList.Process(idListProcessProxySprite, true);          // process additional proximity sprites
     gSightSpritesList.Process(idListProcessSightSprite, true);          // process sight sprites (for players only)
     gPhysSpritesList.Process(idListProcessPhysSprite,   true);          // process Debris sprites for movement
     gFlwSpritesList.Process(idListProcessFollowSprite,  true);          // process projectiles and things for following target
+
+    if (gViewCam.active)
+    {
+        if (!gViewCam.drawToTile)
+        {
+            if (gViewMode == 4)
+            {
+                // show 2d map relative to player
+                gView = gMe = &gPlayer[gViewIndex];
+            }
+            else if (gView >= &gPlayer[0] && gView < &gPlayer[kMaxPlayers])
+            {
+                if (gView->nPlayer == gViewCam.nPlayer) // switch back to camera view
+                    gView = &gViewCam, gMe = &gMeCam;
+            }
+        }
+
+        if (!xsprIsFine(gViewCam.pSprite))
+        {
+            spritetype* pCSrc = &sprite[gViewCam.nCamSrc];
+            XSPRITE* pXCSrc = &xsprite[pCSrc->extra];
+            
+            gViewCam.nSprite = gMeCam.nSprite = pCSrc->index;
+            gViewCam.pSprite = gMeCam.pSprite = pCSrc;
+            gViewCam.pXSprite = gMeCam.pXSprite = pXCSrc;
+        }
+
+        processViewCamera(&gViewCam);
+    }
 }
 
 // this function plays sound predefined in missile info
@@ -2049,6 +2141,12 @@ void trPlayerCtrlLink(XSPRITE* pXSource, PLAYER* pPlayer, bool checkCondition) {
     pPlayer->pXSprite->key              = pXSource->key;
     pPlayer->pXSprite->dropMsg          = pXSource->dropMsg;
 
+    pPlayer->pXSprite->dudeAmbush       = pXSource->dudeAmbush;
+    pPlayer->pXSprite->dudeGuard        = pXSource->dudeGuard;
+    pPlayer->pXSprite->dudeDeaf         = pXSource->dudeDeaf;
+    pPlayer->pXSprite->dudeFlag4        = pXSource->dudeFlag4;
+    pPlayer->pXSprite->unused1          = pXSource->unused1;
+
     // let's check if there is tracking condition expecting objects with this TX id
     if (checkCondition && pXSource->txID >= kChannelUser)
         conditionsLinkPlayer(pXSource, pPlayer);
@@ -2301,6 +2399,98 @@ void trPlayerCtrlUsePowerup(XSPRITE* pXSource, PLAYER* pPlayer, int evCmd) {
 
     return;
 
+}
+
+void trPlayerCtrlSendInput(XSPRITE* pXSrc, PLAYER* pPlay)
+{
+    GINPUT* p = &gInput; GINPUTINFO* pInfo;
+    int nVal;
+
+    if (!rngok(pXSrc->data2, 0, LENGTH(gInputInfo)))
+        return;
+
+    pInfo = &gInputInfo[pXSrc->data2];
+    nVal = pXSrc->data3;
+
+    if (pInfo->valMin > 0 && nVal < 0) nVal = klabs(nVal);
+    if (pInfo->valMin < 0 && nVal > 0) nVal = -nVal;
+    if (irngok(nVal, pInfo->valMin, pInfo->valMax))
+    {
+        spritetype* pSrc = &sprite[pXSrc->reference];
+
+        if ((pSrc->flags & kModernTypeFlag1) == 0)
+        {
+            if (nVal == 0)
+                nVal = pInfo->valDef;
+        }
+
+        if (pSrc->flags & kModernTypeFlag2)
+            Bmemset(p, 0, sizeof(*p));
+        
+        nVal <<= pInfo->valShl;
+    
+        switch (pXSrc->data2)
+        {
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+                if (nVal == 0)
+                {
+                    GINPUT* p2 = &gFifoInput[(gNetFifoTail - 1) & 255][pPlay->nPlayer];
+                    nVal = (pXSrc->data2 == 1 || pXSrc->data2 == 3) ? 1024 : -1024;
+                    nVal <<= p2->syncFlags.run;
+                }
+                (pXSrc->data2 < 3) ? p->forward = nVal : p->strafe = nVal;
+                break;
+            case 5: p->buttonFlags.jump = nVal;                     break;
+            case 6: p->buttonFlags.crouch = nVal;                   break;
+            case 7: p->buttonFlags.shoot = nVal;                    break;
+            case 8: p->buttonFlags.shoot2 = nVal;                   break;
+            case 9: p->keyFlags.action = nVal;                      break;
+            case 10: case 11: p->q16turn = nVal;                    break;
+            case 12: case 13: p->q16mlook = nVal;                   break;
+            case 14: p->keyFlags.lookCenter = nVal;                 break;
+            case 15:
+                if (numplayers == 1) pPlay->lastWeapon = pPlay->curWeapon;
+                p->keyFlags.holsterWeapon = nVal;
+                break;
+            case 16:
+                p->newWeapon = (nVal) ? nVal : pPlay->lastWeapon;
+                break;
+            case 17: p->keyFlags.nextWeapon = nVal;                 break;
+            case 18: p->keyFlags.prevWeapon = nVal;                 break;
+            case 19:
+                switch (nVal)
+                {
+                    case 0: p->keyFlags.useItem = 1;                break;
+                    case 1: p->useFlags.useBeastVision = 1;         break;
+                    case 2: p->useFlags.useCrystalBall = 1;         break;
+                    case 3: p->useFlags.useJumpBoots = 1;           break;
+                    case 4: p->useFlags.useMedKit = 1;              break;
+                }
+                break;
+            case 20: p->keyFlags.nextItem = nVal;                   break;
+            case 21: p->keyFlags.prevItem = nVal;                   break;
+            case 22: p->keyFlags.pause = nVal;                      break;
+            case 23: p->keyFlags.restart = nVal;                    break;
+            case 24: p->keyFlags.quit = nVal;                       break;
+        }
+
+        if (numplayers > 1)
+        {
+            if (pInfo->sync)
+            {
+                if (pInfo->sync & 0x01) p->syncFlags.keyChange      = 1;
+                if (pInfo->sync & 0x02) p->syncFlags.useChange      = 1;
+                if (pInfo->sync & 0x04) p->syncFlags.buttonChange   = 1;
+                if (pInfo->sync & 0x08) p->syncFlags.mlookChange    = 1;
+                if (pInfo->sync & 0x10) p->syncFlags.weaponChange   = 1;
+            }
+
+            Bmemcpy(&gNetInput, p, sizeof(*p));
+        }
+    }
 }
 
 void useObjResizer(XSPRITE* pXSource, short objType, int objIndex) {
@@ -3605,6 +3795,254 @@ void useSeqSpawnerGen(XSPRITE* pXSource, int objType, int index) {
     }
 }
 
+void setupViewCamera(VIEWCAMERA* pCam, PLAYER* pPlay, spritetype* pDest, XSPRITE* pXDest)
+{
+    pCam->sceneQav  = -1;
+    pCam->fraggerId = -1;
+    pCam->weaponQav = -1;
+
+    pCam->nSprite   = pDest->index;
+    pCam->nPlayer   = pPlay->nPlayer;
+    pCam->pSprite   = pDest;
+    pCam->pXSprite  = pXDest;
+    pCam->pDudeInfo = pPlay->pDudeInfo;
+}
+
+char isCameraSprite(spritetype* pSpr)
+{
+    return (gViewCam.active && gViewCam.pSprite == pSpr);
+}
+
+void useViewCamera(XSPRITE* pXSrc, spritetype* pCSpr, spritetype* pTSpr, PLAYER* pPlay)
+{
+    spritetype* pSrc;
+    XSPRITE* pXCSpr;
+
+    if (gViewCam.active)
+    {
+        gView = gMe = pPlay;
+        
+        if (gViewCam.drawToTile == 0)
+        {
+            if (gViewSize != gViewCam.viewSize)
+                viewResizeView(gViewCam.viewSize);
+
+            gAimReticle = gViewCam.aimReticle;
+            gViewPos = (VIEWPOS)gViewCam.viewPos;
+        }
+
+        gViewCam.drawToTile = 0;
+        gViewCam.nTrackSpr = -1;
+        gViewCam.active = 0;
+    }
+
+    if (pXSrc && pCSpr && xsprIsFine(pCSpr) && pPlay->pSprite != pCSpr)
+    {
+        pSrc = &sprite[pXSrc->reference];
+        pXCSpr = &xsprite[pCSpr->extra];
+
+        gViewCam.viewSize = gViewSize;
+        gViewCam.aimReticle = gAimReticle;
+        gViewCam.viewPos = gViewPos;
+        gViewCam.drawToTile = (pSrc->flags & 0x8000) != 0;
+
+        if (gViewCam.drawToTile == 0 && gViewMode != 4)
+        {
+            gView = &gViewCam; gMe = &gMeCam;
+            
+            if (gViewSize) viewResizeView(0);
+            gViewPos = (pSrc->flags & kModernTypeFlag16) ? VIEWPOS_1 : VIEWPOS_0;
+            gAimReticle = 0;
+        }
+
+        setupViewCamera(&gViewCam, pPlay, pCSpr, pXCSpr);
+        setupViewCamera(&gMeCam, pPlay, pCSpr, pXCSpr);
+
+        gViewCam.nCamSrc = pSrc->index;
+        gViewCam.nTrackSpr = -1;
+        if ((pSrc->flags & kModernTypeFlag1) && pTSpr)
+            gViewCam.nTrackSpr = pTSpr->index;
+
+        gViewCam.active = 1;
+    }
+}
+
+void processViewCamera(VIEWCAMERA* pCam)
+{
+    PLAYER* pPlay = &gPlayer[pCam->nPlayer];
+    spritetype* pCSrc = &sprite[pCam->nCamSrc];
+    XSPRITE* pXCSrc = &xsprite[pCSrc->extra];
+    spritetype* pCSpr; LOCATION* pLoc;
+    int nHeigh;
+
+    pCSpr = pCam->pSprite;
+
+    if (IsCustomDude(pCSpr))        nHeigh = cdudeGet(pCSpr)->eyeHeight;
+    else if (IsDudeSprite(pCSpr))   nHeigh = (getDudeInfo(pCSpr->type)->eyeHeight * pCSpr->yrepeat) << 2;
+    else                            nHeigh = 0;
+
+    viewBackupSpriteLoc(pCSpr->index, pCSpr); // only if doesn't have backup already
+    pLoc = &gPrevSpriteLoc[pCSpr->index]; // use prev loc (for interpolation)
+
+    if (gViewInterpolate)
+    {
+        pCam->ix = pLoc->x;
+        pCam->iy = pLoc->y;
+        pCam->iz = pCam->zView;
+
+        pCam->ia = pCam->viewAng;
+        pCam->ih = pCam->viewSlope;
+        pCam->it = pCam->scrAng;
+    }
+
+    pCam->zView         = pLoc->z - nHeigh;
+    pCam->viewAng       = pLoc->ang & kAngMask;
+    pCam->viewSlope     = pXCSrc->data2;
+    pCam->scrAng        = pXCSrc->data3 & kAngMask;
+    pCam->isUnderwater  = spriteIsUnderwater(pCSrc);
+    pCam->drawToTile    = (pCSrc->flags & 0x8000) != 0;
+
+    if (pCam->nCamSpr != pCSpr->index)
+    {
+        pCam->nCamSpr = pCSpr->index;
+        
+        if (gViewInterpolate)
+        {
+            pCam->iz = pCam->zView;
+            pCam->ia = pCam->viewAng;
+            pCam->ih = pCam->viewSlope;
+            pCam->it = pCam->scrAng;
+        }
+    }
+
+    if ((pCSrc->flags & kModernTypeFlag1) && pCam->nTrackSpr >= 0)
+    {
+        // Track this sprite
+        spritetype* pTSpr = &sprite[pCam->nTrackSpr];
+
+        if (pTSpr->statnum < kMaxStatus)
+        {
+            int dx = pTSpr->x - pCSpr->x;
+            int dy = pTSpr->y - pCSpr->y;
+            int nDist = approxDist(dx, dy);
+            int nAng  = getangle(dx, dy);
+            int t;
+
+            if ((pCSrc->flags & kModernTypeFlag2) == 0)
+                pCam->viewAng = nAng;
+
+            if ((pCSrc->flags & kModernTypeFlag4) == 0)
+            {
+                pCam->viewSlope = divscale10((pCam->zView - pTSpr->z) >> 8, nDist);
+                if (pXCSrc->data2)
+                    t = klabs(pXCSrc->data2), pCam->viewSlope = ClipRange(pCam->viewSlope, -t, t);
+            }
+
+            if ((pCSrc->flags & kModernTypeFlag8) != 0)
+            {
+                pCam->scrAng = DANGLE(nAng, pCSpr->ang);
+                if (pXCSrc->data3)
+                    t = klabs(pXCSrc->data3), pCam->scrAng = ClipRange(pCam->scrAng, -t, t);
+
+                pCam->scrAng = pCam->scrAng & kAngMask;
+            }
+        }
+    }
+    
+    if ((pCSrc->flags & kModernTypeFlag64) != 0)
+    {
+        pCam->flashEffect                   = pPlay->flashEffect;
+        pCam->flickerEffect                 = pPlay->flickerEffect;
+        pCam->visibility                    = pPlay->visibility;
+        pCam->painEffect                    = pPlay->painEffect;
+        pCam->blindEffect                   = pPlay->blindEffect;
+        pCam->chokeEffect                   = pPlay->chokeEffect;
+        pCam->tiltEffect                    = pPlay->tiltEffect;
+        pCam->pickupEffect                  = pPlay->pickupEffect;
+        pCam->pwUpTime[kPwUpDeliriumShroom] = pPlay->pwUpTime[kPwUpDeliriumShroom];
+    }
+
+    if (pCam->drawToTile)
+    {
+        #define kCamTileRes 512
+
+        static char ror_status[kMaxMirrors];
+        int nTile = 4080;
+        int t, i;
+
+        fix16_t q16Ang   = fix16_from_int(pCam->viewAng);
+        fix16_t q16Slope = fix16_from_int(pCam->viewSlope);
+
+        if (tilesiz[nTile].x != kCamTileRes || tilesiz[nTile].y != kCamTileRes)
+            tileDelete(nTile), tileCreate(nTile, kCamTileRes, kCamTileRes);
+
+        if (!waloff[nTile])
+            tileLoad(nTile);
+
+        if (waloff[nTile])
+        {
+            int16_t s = pCSpr->sectnum;
+            int32_t x = pCSpr->x, y = pCSpr->y, z = pCam->zView;
+
+            renderSetTarget(nTile, kCamTileRes, kCamTileRes);
+
+            if (pCSrc->flags & kModernTypeFlag16)
+            {
+                GetSpriteExtents(pCSpr, &z, &t);
+                nnExtOffsetPos(0, -1024, 0, pCam->viewAng, &x, &y, NULL);
+                updatesectorz(x, y, z, &s);
+                if (s < 0)
+                    s = pCSpr->sectnum;
+            }
+
+            t = 16; i = 1;
+            while (i >= 0 && t >= 0)
+            {
+                i = mirrorcnt;
+                while (--i >= 0) ror_status[i] = ROR_TestGotPic(i);
+
+                DrawMirrors(x, y, z, q16Ang, q16Slope, gInterpolate, -1);
+
+                yax_preparedrawrooms();
+                drawrooms(x, y, z, pCam->viewAng, pCam->viewSlope, s);
+                yax_drawrooms(viewProcessSprites, s, 0, gInterpolate);
+
+                i = mirrorcnt;
+                while (--i >= 0 && ror_status[i] == ROR_TestGotPic(i));
+
+                viewProcessSprites(x, y, z, pCam->viewAng, gInterpolate);
+                renderDrawMasks();
+            }
+
+            renderRestoreTarget();
+            squarerotatetile(nTile);
+
+            i = nTile; nTile = pCSrc->picnum;
+            if (i != nTile)
+            {
+                if (tilesiz[nTile].x != kCamTileRes || tilesiz[nTile].y != kCamTileRes)
+                    tileDelete(nTile), tileCreate(nTile, kCamTileRes, kCamTileRes);
+
+                if (!waloff[nTile])
+                    tileLoad(nTile);
+
+                if (waloff[nTile])
+                    Bmemcpy((void*)waloff[nTile], (void*)waloff[i], kCamTileRes * kCamTileRes);
+
+#ifdef USE_OPENGL
+                if (videoGetRenderMode() != REND_CLASSIC)
+                    gltexinvalidatetype(INVALIDATE_ART); // need update after tile copying?
+#endif
+            }
+        }
+    }
+    else
+    {
+        if (gViewSize) viewResizeView(0);
+        gViewPos = (pCSrc->flags & kModernTypeFlag16) ? VIEWPOS_1 : VIEWPOS_0;
+        gAimReticle = 0;
+    }
+}
 
 bool valueIsBetween(int val, int min, int max) {
     return (val > min && val < max);
@@ -4233,6 +4671,34 @@ bool modernTypeOperateSector(int nSector, sectortype* pSector, XSECTOR* pXSector
 
 }
 
+PLAYER* helperOperateCheckPlayer(XSPRITE* pXSpr, EVENT* pEvn, int* nCompare)
+{
+    int nID; char anyPlayer = 0;
+    PLAYER* pPlay;
+
+    if ((pXSpr->txID == kChannelEventCauser || pXSpr->data1 == 0) && pEvn->causer < kCauserGame && IsPlayerSprite(&sprite[pEvn->causer]))
+        nID = sprite[pEvn->causer].type;
+    else if (irngok(pXSpr->txID, kChannelPlayer0, kChannelPlayer7))
+        nID = pXSpr->txID - kChannelPlayer0 + 1;
+    else if (pXSpr->data1 > 0)      nID = pXSpr->data1;
+    else if (gViewCam.active)       nID = gViewCam.nPlayer+1, anyPlayer = 1;
+    else                            nID = gMe->nPlayer+1, anyPlayer = 1;
+
+    pPlay = getPlayerById(nID);
+
+    if (nCompare)
+    {
+        if (anyPlayer)
+            *nCompare = kMaxPlayers;
+        else if (pPlay && (pPlay == gMe || (gViewCam.active && gViewCam.nPlayer == pPlay->nPlayer)))
+            *nCompare = pPlay->nPlayer;
+        else
+            *nCompare = -1;
+    }
+
+    return pPlay;
+}
+
 bool modernTypeOperateSprite(int nSprite, spritetype* pSprite, XSPRITE* pXSprite, EVENT event) {
 
     int causerID = event.causer;
@@ -4695,37 +5161,29 @@ bool modernTypeOperateSprite(int nSprite, spritetype* pSprite, XSPRITE* pXSprite
         case kModernThingEnemyLifeLeech:
             cdudeLeechOperate(pSprite, pXSprite);
             return true;
-        case kModernPlayerControl: { // WIP
-            PLAYER* pPlayer = NULL; int cmd = (event.cmd >= kCmdNumberic) ? event.cmd : pXSprite->command;
-            
-            int playerID;
-            if ((pXSprite->txID == kChannelEventCauser || pXSprite->data1 == 0) && spriRangeIsFine(event.causer) && IsPlayerSprite(&sprite[event.causer]))
-                playerID = sprite[event.causer].type;
-            else
-                playerID = pXSprite->data1;
+        case kModernPlayerControl:
+        {
+            PLAYER *pPlayer;
+            int nCompare, nCmd, i;
 
-            if ((pPlayer = getPlayerById(playerID)) == NULL
-                    || ((cmd < 67 || cmd > 68) && !modernTypeSetSpriteState(nSprite, pXSprite, pXSprite->state ^ 1, causerID)))
-                        return true;
+            nCmd = ((event.cmd >= kCmdNumberic) ? event.cmd : pXSprite->command) - kCmdNumberic;
+            if (nCmd < 0)
+                return true;
+
+            if ((pPlayer = helperOperateCheckPlayer(pXSprite, &event, &nCompare)) == NULL)
+                return true;
+
+            if (!irngok(nCmd, 3, 4) && nCmd != 20
+                && !modernTypeSetSpriteState(nSprite, pXSprite, pXSprite->state ^ 1, causerID))
+                    return true;
+
+            if (pPlayer->pXSprite->health <= 0 && !irngok(nCmd, 19, 20))
+                return true;
 
             TRPLAYERCTRL* pCtrl = &gPlayerCtrl[pPlayer->nPlayer];
 
-            /// !!! COMMANDS OF THE CURRENT SPRITE, NOT OF THE EVENT !!! ///
-            if ((cmd -= kCmdNumberic) < 0) return true;
-            else if (pPlayer->pXSprite->health <= 0) {
-                        
-                switch (cmd) {
-                    case 36:
-                        actHealDude(pPlayer->pXSprite, ((pXSprite->data2 > 0) ? ClipHigh(pXSprite->data2, 200) : getDudeInfo(pPlayer->pSprite->type)->startHealth), 200);
-                        pPlayer->curWeapon = kWeaponPitchfork;
-                        break;
-                }
-                        
-                return true;
-
-            }
-
-            switch (cmd) {
+            switch (nCmd)
+            {
                 case 0: // 64 (player life form)
                     if (pXSprite->data2 < kModeHuman || pXSprite->data2 > kModeHumanGrown) break;
                     else trPlayerCtrlSetRace(pXSprite, pPlayer);
@@ -4778,19 +5236,175 @@ bool modernTypeOperateSprite(int nSprite, spritetype* pSprite, XSPRITE* pXSprite
                     if (pXSprite->data2 <= 0 || pXSprite->data2 > (kMaxAllowedPowerup - (kMinAllowedPowerup << 1) + 1)) break;
                     trPlayerCtrlUsePowerup(pXSprite, pPlayer, event.cmd);
                     break;
-               // case 11: // 75 (print the book)
-                    // data2: RFF TXT id
-                    // data3: background tile
-                    // data4: font base tile
-                    // pal: font / background palette
-                    // hitag:
-                    // d1: 0: print whole text at a time, 1: print line by line, 2: word by word, 3: letter by letter
-                    // d2: 1: force pause the game (sp only)
-                    // d3: 1: inherit palette for font, 2: inherit palette for background, 3: both
-                    // busyTime: speed of word/letter/line printing
-                    // waitTime: if TX ID > 0 and TX ID object is book reader, trigger it?
-                    //break;
+                case 19: // 83: set user input status
+                    for (i = connecthead; i >= 0; i = connectpoint2[i])
+                    {
+                        PLAYER* pOther = &gPlayer[i];
+                        if (nCompare == kMaxPlayers || pPlayer == pOther)
+                        {
+                            if (pXSprite->data2 & kInputDisableAll)
+                                pOther->pXSprite->sysData1 |= kInputDisableAll;
+                            else
+                                pOther->pXSprite->sysData1 &= ~kInputDisableAll;
 
+                            if (pXSprite->data2 & kInputProcessNone)
+                                pOther->pXSprite->sysData1 |= kInputProcessNone;
+                            else
+                                pOther->pXSprite->sysData1 &= ~kInputProcessNone;
+                        }
+                    }
+                    break;
+                case 20: // 84: send input
+                    switch (event.cmd)
+                    {
+                        case kCmdOff:
+                            if (pXSprite->state)
+                            {
+                                evKill(nSprite, OBJ_SPRITE, causerID);
+                                pXSprite->state = 0;
+
+                                if (pXSprite->triggerOff)
+                                {
+                                    if (pXSprite->busyTime <= 0
+                                        && (nCompare == kMaxPlayers || nCompare == pPlayer->nPlayer))
+                                            trPlayerCtrlSendInput(pXSprite, pPlayer);
+
+                                    if (pXSprite->txID)
+                                        evSend(pSprite->index, OBJ_SPRITE, pXSprite->txID, (COMMAND_ID)pXSprite->command, causerID);
+                                }
+                            }
+                            break;
+                        case kCmdOn:
+                            if (!pXSprite->state)
+                            {
+                                evKill(nSprite, OBJ_SPRITE, causerID);
+                                pXSprite->state = 1;
+
+                                if (pXSprite->waitTime)
+                                    evPost(nSprite, OBJ_SPRITE, EVTIME2TICKS(pXSprite->waitTime), kCmdOff, causerID);
+                            }
+                            fallthrough__;
+                        case kCmdRepeat:
+                            if (nCompare == kMaxPlayers || nCompare == pPlayer->nPlayer)
+                                trPlayerCtrlSendInput(pXSprite, pPlayer);
+
+                            if (pXSprite->busyTime)
+                                evPost(nSprite, OBJ_SPRITE, pXSprite->busyTime, kCmdRepeat, causerID);
+
+                            if (!pXSprite->waitTime && pXSprite->triggerOn && pXSprite->txID)
+                                evSend(pSprite->index, OBJ_SPRITE, pXSprite->txID, (COMMAND_ID)pXSprite->command, causerID);
+                            break;
+                        default:
+                            evPost(nSprite, OBJ_SPRITE, 0, (COMMAND_ID)(pXSprite->state ^ 1), causerID);
+                            break;
+                    }
+                    break;
+
+            }
+        }
+        return true;
+        case kModernViewCamera:
+        {
+            int nCompare, i, t;
+            spritetype *pCSpr = NULL, *pTSpr = NULL, *pSpr = NULL;
+            PLAYER* pPlayer;
+
+            if ((pPlayer = helperOperateCheckPlayer(pXSprite, &event, &nCompare)) == NULL)
+                return true;
+
+            switch (event.cmd)
+            {
+                case kCmdOn: // set view camera
+                    
+                    // Lookup in TX ID directy to
+                    // allow track or attach for
+                    // locked sprites
+        
+                    pCSpr = pSprite;
+                    pTSpr = pPlayer->pSprite;
+
+                    if (irngok(pXSprite->txID, kChannelPlayer0, kChannelPlayer7))
+                    {
+                        PLAYER* pPlayer2;
+                        t = pXSprite->txID - kChannelPlayer0 + 1;
+                        if ((pPlayer2 = getPlayerById(t)) != NULL)
+                            pSpr = pPlayer2->pSprite;
+                    }
+                    else if (pXSprite->txID == kChannelEventCauser)
+                    {
+                        if (spriRangeIsFine(event.causer)
+                            && getPlayerById(sprite[event.causer].type) != pPlayer)
+                                pSpr = &sprite[event.causer];
+                    }
+                    else if (pXSprite->txID >= kChannelUser)
+                    {
+                        t = pXSprite->txID;
+                        for (i = bucketHead[t]; i < bucketHead[t + 1]; i++)
+                        {
+                            if (rxBucket[i].type != OBJ_SPRITE)
+                                continue;
+                            
+                            pSpr = &sprite[rxBucket[i].index];
+                            if (Chance(0x8000))
+                                break;
+                        }
+                    }
+
+                    if (pSpr != NULL)
+                    {
+                        if ((pSprite->flags & kModernTypeFlag1) && (pSprite->flags & kModernTypeFlag128))
+                            pTSpr = pSpr; // track it
+                        else
+                            pCSpr = pSpr; // attach camera on it
+                    }
+
+                    fallthrough__;
+                case kCmdOff: // unset view camera
+                    if (nCompare == kMaxPlayers || nCompare == pPlayer->nPlayer)
+                        useViewCamera(pXSprite, pCSpr, pTSpr, pPlayer);
+                    break;
+                default:
+                    evPost(pSprite->index, OBJ_SPRITE, 0, (COMMAND_ID)(gViewCam.active == 0), causerID);
+                    break;
+            }
+        }
+        return true;
+        case kModernMusicChanger:
+        {
+            DICTNODE* hRes;
+            PLAYER* pPlayer; int nCompare;
+            GAMEOPTIONS* pOpt = &gGameOptions;
+            LEVELINFO* pLev = &gEpisodeInfo[pOpt->nEpisode].levelsInfo[pOpt->nLevel];
+
+            if ((pPlayer = helperOperateCheckPlayer(pXSprite, &event, &nCompare)) == NULL)
+                return true;
+
+            if (nCompare != kMaxPlayers && nCompare != pPlayer->nPlayer)
+                return true;
+
+            switch (event.cmd)
+            {
+                case kCmdOn:
+                    if (pXSprite->data2 > 0
+                        && (hRes = gSoundRes.Lookup(pXSprite->data2, "MID")) != NULL)
+                            Bstrcpy(pOpt->zLevelSong, hRes->name);
+                    else
+                        Bstrcpy(pOpt->zLevelSong, pLev->Song);
+
+                    gCustomMusicStatus = 1;
+                    if (pSprite->flags & kModernTypeFlag1)
+                        gCustomMusicStatus = 2;
+
+                    sndPlaySong(pOpt->zLevelSong, gCustomMusicStatus == 1);
+                    break;
+                case kCmdOff:
+                    Bstrcpy(pOpt->zLevelSong, pLev->Song);
+                    gCustomMusicStatus = 0;
+                    sndStopSong();
+                    break;
+                default:
+                    evPost(pSprite->index, OBJ_SPRITE, 0, (COMMAND_ID)(gCustomMusicStatus <= 0), causerID);
+                    break;
             }
         }
         return true;
@@ -5995,6 +6609,33 @@ void useGibObject(XSPRITE* pXSource, spritetype* pSpr)
 //---------------------------------------
 
 // player related
+void playerProcessAiState(void)
+{
+    PLAYER* pPlay; spritetype* pSpr; XSPRITE* pXSpr;
+    int i;
+
+    for (i = connecthead; i >= 0; i = connectpoint2[i])
+    {
+        pPlay = &gPlayer[i];
+        if (!spriRangeIsFine(pPlay->nSprite))
+            continue;
+
+        pSpr = &sprite[pPlay->nSprite];
+        if (!xspriRangeIsFine(pSpr->extra))
+            continue;
+
+        pXSpr = &xsprite[pSpr->extra];
+        pXSpr->stateTimer = ClipLow(pXSpr->stateTimer-kTicsPerFrame, 0);
+
+        if (pXSpr->aiState && pXSpr->aiState->moveFunc)
+            pXSpr->aiState->moveFunc(pSpr, pXSpr);
+
+        if (pXSpr->aiState
+            && pXSpr->aiState->thinkFunc && (gFrame & 3) == (pSpr->index & 3))
+                pXSpr->aiState->thinkFunc(pSpr, pXSpr);
+    }
+}
+
 QAV* playerQavSceneLoad(int qavId) {
     QAV* pQav = NULL; DICTNODE* hQav = gSysRes.Lookup(qavId, "QAV");
 
@@ -6107,12 +6748,6 @@ void playerQavScenePlay(PLAYER* pPlayer) {
     }
 }
 
-void playerQavSceneReset(PLAYER* pPlayer) {
-    QAVSCENE* pQavScene = &gPlayerCtrl[pPlayer->nPlayer].qavScene;
-    pQavScene->index = pQavScene->dummy = pPlayer->sceneQav = -1;
-    pQavScene->qavResrc = NULL;
-}
-
 bool playerSizeShrink(PLAYER* pPlayer, int divider) {
     pPlayer->pXSprite->scale = 256 / divider;
     playerSetRace(pPlayer, kModeHumanShrink);
@@ -6154,7 +6789,7 @@ PLAYER* getPlayerById(short id) {
     // absolute sprite type
     } else if (id >= kDudePlayer1 && id <= kDudePlayer8) {
         for (int i = connecthead; i >= 0; i = connectpoint2[i]) {
-            if (id == gPlayer[i].pSprite->type)
+            if (gPlayer[i].pSprite && id == gPlayer[i].pSprite->type)
                 return &gPlayer[i];
         }
     }
@@ -7687,6 +8322,26 @@ class nnExtLoadSave : public LoadSave
     virtual void Save(void);
 };
 
+void viewCameraLoad(LoadSave* pSave)
+{
+    int const nLen = sizeof(VIEWCAMERA) - sizeof(PLAYER);
+    unsigned char* p = (unsigned char*)&gViewCam;
+    p += sizeof(PLAYER);
+
+    pSave->Read(p, nLen);
+
+    VIEWCAMERA* pCam = &gViewCam;
+    if (gView && pCam->active)
+    {
+        spritetype* pCSpr = spriRangeIsFine(pCam->nCamSpr) ? &sprite[pCam->nCamSpr] : NULL;
+        spritetype* pTSpr = spriRangeIsFine(pCam->nTrackSpr) ? &sprite[pCam->nTrackSpr] : NULL;
+        spritetype* pCSrc = spriRangeIsFine(pCam->nCamSrc) ? &sprite[pCam->nCamSrc] : NULL;
+        XSPRITE* pXCSrc = (pCSrc != NULL && xsprIsFine(pCSrc)) ? &xsprite[pCSrc->extra] : NULL;
+
+        useViewCamera(pXCSrc, pCSpr, pTSpr, gView);
+    }
+}
+
 void nnExtLoadSave::Load(void)
 {
     char tmp[32];
@@ -7699,7 +8354,18 @@ void nnExtLoadSave::Load(void)
     laserLoad(this);
     pathSpriteLoad(this);
     cdudeLoad(this);
+    viewCameraLoad(this);
+    Read(&gCustomMusicStatus, sizeof(gCustomMusicStatus));
     Read(tmp, Bstrlen(nnExtBlkSign[1]));
+}
+
+void viewCameraSave(LoadSave* pSave)
+{
+    int const nLen = sizeof(VIEWCAMERA) - sizeof(PLAYER);
+    unsigned char* p = (unsigned char*)&gViewCam;
+    p += sizeof(PLAYER);
+
+    pSave->Write(p, nLen);
 }
 
 void nnExtLoadSave::Save(void)
@@ -7712,6 +8378,8 @@ void nnExtLoadSave::Save(void)
     laserSave(this);
     pathSpriteSave(this);
     cdudeSave(this);
+    viewCameraSave(this);
+    Write(&gCustomMusicStatus, sizeof(gCustomMusicStatus));
     Write(nnExtBlkSign[1], strlen(nnExtBlkSign[1]));
 }
 
