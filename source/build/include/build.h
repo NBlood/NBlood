@@ -1101,7 +1101,7 @@ enum
 #ifndef EDUKE32_STANDALONE
 extern int32_t enginecompatibilitymode;
 #else
-static CONSTEXPR int32_t const enginecompatibilitymode = ENGINE_EDUKE32;
+static int32_t enginecompatibilitymode = ENGINE_EDUKE32;
 #endif
 
 EXTERN int32_t crctab16[256];
