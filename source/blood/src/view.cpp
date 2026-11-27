@@ -114,7 +114,7 @@ struct INTERPOLATE {
 
 int pcBackground;
 int gViewMode = 3;
-int gViewSize = 2;
+int gViewSize = 3;
 
 bool gPrediction = true;
 
@@ -1355,7 +1355,7 @@ void viewDrawStats(PLAYER *pPlayer, int x, int y)
     y += nHeight+1;
     sprintf(buffer, "S:%d/%d", gSecretMgr.nNormalSecretsFound, max(gSecretMgr.nNormalSecretsFound, gSecretMgr.nAllSecrets)); // if we found more than there are, increase the total - some levels have a bugged counter
     viewDrawText(3, buffer, x, y, 20, 0, 0, true, 256);
-    if (gViewMode == 3 && gViewSize > 3 && gLastPageTimeStats != gLevelTime) // redraw borders
+    if (gViewMode == 3 && gViewSize > 4 && gLastPageTimeStats != gLevelTime) // redraw borders
         viewUpdatePages();
     gLastPageTimeStats = gLevelTime;
 }
@@ -1499,7 +1499,7 @@ void viewDrawPowerUps(PLAYER* pPlayer)
     }
     static int gLastPageTimePowerup = 0;
     static int gLastPageTimePowerupCount = 0;
-    if (gViewMode == 3 && gViewSize > 3) // redraw borders
+    if (gViewMode == 3 && gViewSize > 4) // redraw borders
     {
         if ((gLastPageTimePowerup != gLevelTime && nSortCount) || (gLastPageTimePowerupCount != nSortCount))
             viewUpdatePages();
@@ -1749,7 +1749,7 @@ void viewDrawCtfHud(ClockTicks arg)
     flashTeamScore(arg, 1, true);
 
     static int gLastPageTimeFlag = 0;
-    if (gViewMode == 3 && gViewSize > 3 && (gLastPageTimeFlag != gLevelTime)) // redraw borders
+    if (gViewMode == 3 && gViewSize > 4 && (gLastPageTimeFlag != gLevelTime)) // redraw borders
         viewUpdatePages();
     gLastPageTimeFlag = gLevelTime;
 }
@@ -1827,9 +1827,13 @@ void UpdateStatusBar(ClockTicks arg)
         else
             viewDrawPack(pPlayer, 166, 200-tilesiz[2201].y/2);
     }
-    if (gViewSize == 2)
+    if (gViewSize == 2 || gViewSize == 3)
     {
-        DrawStatSprite(2201, 34, 187, 16, nPalette, 256);
+        const char bKeyHolder = gViewSize == 3; // if hud size 3, use custom key holder attached to health/ammo hud tile
+        if (bKeyHolder)
+            DrawStatSprite(kSBarKeyHolderAlt, 52, 187, 16, nPalette, 256);
+        else
+            DrawStatSprite(2201, 34, 187, 16, nPalette, 256);
         if (pXSprite->health >= 16 || ((int)totalclock&16) || pXSprite->health == 0)
         {
             DrawStatNumber("%3d", pXSprite->health>>4, 2190, 8, 183, 0, 0, 256);
@@ -1859,7 +1863,24 @@ void UpdateStatusBar(ClockTicks arg)
         }
         DrawPackItemInStatusBar(pPlayer, 286, 186, 302, 183, 512);
 
-        if (gGameOptions.nGameType <= kGameTypeCoop) // don't show keys for bloodbath/teams as all players have every key
+        if (bKeyHolder)
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                const int nTile = 2220+i;
+                int x, y;
+                x = 75+(i>>1)*11;
+                if (i&1)
+                    y = 200-8;
+                else
+                    y = 200-19;
+                if (pPlayer->hasKey[i+1])
+                    DrawStatSprite(nTile, x, y, 0, 0, 256);
+                else
+                    DrawStatSprite(nTile, x, y, 40, 5, 256);
+            }
+        }
+        else if (gGameOptions.nGameType <= kGameTypeCoop) // don't show keys for bloodbath/teams as all players have every key
         {
             for (int i = 0; i < 6; i++)
             {
@@ -1887,7 +1908,7 @@ void UpdateStatusBar(ClockTicks arg)
         viewDrawStats(pPlayer, 2, 140);
         viewDrawPowerUps(pPlayer);
     }
-    else if (gViewSize > 2)
+    else if (gViewSize > 3)
     {
         viewDrawPack(pPlayer, 160, 200-tilesiz[2200].y);
         DrawStatMaskedSprite(2200, 160, 172, 16, nPalette);
@@ -2028,6 +2049,7 @@ void viewPrecacheTiles(void)
     {
         tilePrecacheTile(kSBarNegative + i, 0);
     }
+    tilePrecacheTile(kSBarKeyHolderAlt, 0);
     for (int i = 0; i < kPackMax; i++)
     {
         tilePrecacheTile(gPackIcons[i], 0);
@@ -2105,8 +2127,8 @@ void viewResizeView(int size)
     yscale = divscale16(ydim, 200);
     xstep = divscale16(320, xdim);
     ystep = divscale16(200, ydim);
-    gViewSize = ClipRange(size, 0, 7);
-    if (gViewSize <= 2)
+    gViewSize = ClipRange(size, 0, 8);
+    if (gViewSize <= 3)
     {
         gViewX0 = 0;
         gViewX1 = xdim-1;
@@ -2133,10 +2155,10 @@ void viewResizeView(int size)
         }
 
         int height = gViewY1-gViewY0;
-        gViewX0 += mulscale16(xdim*(gViewSize-3),4096);
-        gViewX1 -= mulscale16(xdim*(gViewSize-3),4096);
-        gViewY0 += mulscale16(height*(gViewSize-3),4096);
-        gViewY1 -= mulscale16(height*(gViewSize-3),4096);
+        gViewX0 += mulscale16(xdim*(gViewSize-4),4096);
+        gViewX1 -= mulscale16(xdim*(gViewSize-4),4096);
+        gViewY0 += mulscale16(height*(gViewSize-4),4096);
+        gViewY1 -= mulscale16(height*(gViewSize-4),4096);
         gViewX0S = divscale16(gViewX0, xscalecorrect);
         gViewY0S = divscale16(gViewY0, yscale);
         gViewX1S = divscale16(gViewX1, xscalecorrect);
@@ -2155,7 +2177,7 @@ void viewResizeView(int size)
         int nOffset = 1;
         if ((gGameOptions.nGameType == kGameTypeTeams) && VanillaMode()) // lower text for vanilla CTF hud (v1.21 did not do this)
             nOffset = 15;
-        else if ((gGameOptions.nGameType == kGameTypeSinglePlayer) && (gViewSize < 4) && !VanillaMode()) // lower message position for single-player
+        else if ((gGameOptions.nGameType == kGameTypeSinglePlayer) && (gViewSize < 5) && !VanillaMode()) // lower message position for single-player
             nOffset = 6;
         gGameMessageMgr.SetCoordinates(gViewX0S + 1, gViewY0S + nOffset);
     }
@@ -2182,7 +2204,7 @@ void UpdateFrame(void)
 void viewDrawInterface(ClockTicks arg)
 {
     const char bDrawFragsBg = (gGameOptions.nGameType != kGameTypeSinglePlayer) && (!VanillaMode() || gGameOptions.nGameType != kGameTypeTeams);
-    if (gViewMode == 3 && (gViewSize >= 3 || bDrawFragsBg) && (pcBackground != 0 || videoGetRenderMode() >= REND_POLYMOST))
+    if (gViewMode == 3 && (gViewSize >= 4 || bDrawFragsBg) && (pcBackground != 0 || videoGetRenderMode() >= REND_POLYMOST))
     {
         UpdateFrame();
         pcBackground--;
